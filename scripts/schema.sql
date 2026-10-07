@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS ori_desvios (
   ativo INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS ori_usuarios (
-  email TEXT PRIMARY KEY,
+  usuario TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
   senha_hash TEXT NOT NULL,
   perfil TEXT NOT NULL DEFAULT 'contas' CHECK (perfil IN ('contas','gestor','admin')),

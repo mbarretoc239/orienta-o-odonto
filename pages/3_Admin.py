@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import streamlit as st
 
 from core import auth
@@ -12,19 +12,19 @@ try:
     aba_u, aba_d, aba_a = st.tabs(["Usuários", "Desvios", "Auditoria"])
 
     with aba_u:
-        usuarios = db().query("SELECT email, nome, perfil, status, criado_em FROM ori_usuarios ORDER BY status, nome")
+        usuarios = db().query("SELECT usuario, nome, perfil, status, criado_em FROM ori_usuarios ORDER BY status, nome")
         st.dataframe(pd.DataFrame(usuarios), width="stretch", hide_index=True)
         if usuarios:
-            email = st.selectbox("Usuário", [u["email"] for u in usuarios])
-            atual = next(u for u in usuarios if u["email"] == email)
+            login = st.selectbox("Usuário", [u["usuario"] for u in usuarios])
+            atual = next(u for u in usuarios if u["usuario"] == login)
             perfil = st.selectbox("Perfil", auth.PERFIS, index=auth.PERFIS.index(atual["perfil"]))
             status = st.selectbox("Status", ["pendente", "ativo", "inativo"],
                                   index=["pendente", "ativo", "inativo"].index(atual["status"]))
             if st.button("Salvar usuário", type="primary"):
-                if email == usuario["email"] and (perfil != "admin" or status != "ativo"):
+                if login == usuario["usuario"] and (perfil != "admin" or status != "ativo"):
                     st.error("Você não pode remover seu próprio acesso de admin.")
                 else:
-                    db().execute("UPDATE ori_usuarios SET perfil=?, status=? WHERE email=?", (perfil, status, email))
+                    db().execute("UPDATE ori_usuarios SET perfil=?, status=? WHERE usuario=?", (perfil, status, login))
                     st.success("Usuário atualizado.")
                     st.rerun()
 

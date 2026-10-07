@@ -48,7 +48,7 @@ def db():
     return d
 
 
-USR = {"email": "a@b.com", "nome": "A", "perfil": "contas"}
+USR = {"usuario": "a.b", "nome": "A", "perfil": "contas"}
 
 
 def test_numeracao_e_acao_sequenciais(db):
@@ -77,13 +77,14 @@ def test_cadastro_prestador_novo(db):
 
 
 def test_login_fluxo_pendente_ativo(db):
-    assert auth.registrar_usuario(db, "novo@x.com", "Novo", "senha-segura-1")[0]
-    assert not auth.registrar_usuario(db, "novo@x.com", "Novo", "senha-segura-1")[0]
-    assert not auth.registrar_usuario(db, "ruim", "N", "senha-segura-1")[0]
-    assert not auth.registrar_usuario(db, "b@x.com", "N", "curta")[0]
-    u, msg = auth.autenticar(db, "novo@x.com", "senha-segura-1")
+    assert auth.registrar_usuario(db, "novo.x", "Novo", "senha-segura-1")[0]
+    assert not auth.registrar_usuario(db, "NOVO.X", "Novo", "senha-segura-1")[0]
+    assert not auth.registrar_usuario(db, "a b", "N", "senha-segura-1")[0]
+    assert not auth.registrar_usuario(db, "bb", "N", "senha-segura-1")[0]
+    assert not auth.registrar_usuario(db, "outro.u", "N", "curta")[0]
+    u, msg = auth.autenticar(db, "novo.x", "senha-segura-1")
     assert u is None and "aprova" in msg
-    db.execute("UPDATE ori_usuarios SET status='ativo' WHERE email='novo@x.com'")
-    u, _ = auth.autenticar(db, "NOVO@x.com", "senha-segura-1")
-    assert u["perfil"] == "contas"
-    assert auth.autenticar(db, "novo@x.com", "errada")[0] is None
+    db.execute("UPDATE ori_usuarios SET status='ativo' WHERE usuario='novo.x'")
+    u, _ = auth.autenticar(db, " NOVO.X ", "senha-segura-1")
+    assert u["perfil"] == "contas" and u["usuario"] == "novo.x"
+    assert auth.autenticar(db, "novo.x", "errada")[0] is None

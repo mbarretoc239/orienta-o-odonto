@@ -25,9 +25,9 @@ def cadastrar_prestador(db, usuario, documento, nome):
     db.batch([
         (
             "INSERT INTO ori_prestadores (documento, nome, origem, criado_por) VALUES (?,?,'cadastro',?)",
-            (doc, nome, usuario["email"]),
+            (doc, nome, usuario["usuario"]),
         ),
-        auditoria.registrar(usuario["email"], "ori_prestadores", doc, "INSERT", None, {"nome": nome}),
+        auditoria.registrar(usuario["usuario"], "ori_prestadores", doc, "INSERT", None, {"nome": nome}),
     ])
     return True, "Prestador cadastrado."
 
@@ -52,13 +52,13 @@ def registrar_orientacao(db, usuario, documento, desvio_id, data_orientacao, sin
             "INSERT INTO ori_orientacoes (documento, desvio_id, data_orientacao, numero_orientacao, acao, "
             "credenciamento_sinalizado, observacao, criado_por) "
             f"SELECT ?, ?, ?, {n}, CASE WHEN ({n}) % {int(ACAO_A_CADA)} = 0 THEN 'FORMS' END, ?, ?, ?",
-            (doc, desvio_id, data_iso, doc, desvio_id, doc, desvio_id, sinalizado, observacao or None, usuario["email"]),
+            (doc, desvio_id, data_iso, doc, desvio_id, doc, desvio_id, sinalizado, observacao or None, usuario["usuario"]),
         ),
         (
             "INSERT INTO ori_auditoria (quem, tabela, registro, acao, depois) "
             "SELECT ?, 'ori_orientacoes', id, 'INSERT', json_object('documento', documento, "
             "'desvio_id', desvio_id, 'numero', numero_orientacao) FROM ori_orientacoes WHERE id = last_insert_rowid()",
-            (usuario["email"],),
+            (usuario["usuario"],),
         ),
     ])
     return db.query(
@@ -77,9 +77,9 @@ def excluir_orientacao(db, usuario, orientacao_id):
     db.batch([
         (
             "UPDATE ori_orientacoes SET excluido_em=datetime('now'), excluido_por=? WHERE id=?",
-            (usuario["email"], orientacao_id),
+            (usuario["usuario"], orientacao_id),
         ),
-        auditoria.registrar(usuario["email"], "ori_orientacoes", orientacao_id, "DELETE", antes[0], None),
+        auditoria.registrar(usuario["usuario"], "ori_orientacoes", orientacao_id, "DELETE", antes[0], None),
     ])
     return True, "Orientacao excluida."
 

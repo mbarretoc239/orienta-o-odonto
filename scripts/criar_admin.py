@@ -1,4 +1,4 @@
-"""Cria o primeiro admin. Uso: python scripts/criar_admin.py (pede e-mail, nome e senha no terminal)."""
+"""Cria o primeiro admin. Uso: python scripts/criar_admin.py (pede usuario, nome e senha no terminal)."""
 import getpass
 import sys
 from pathlib import Path
@@ -10,10 +10,10 @@ from core.db import criar_schema, get_db  # noqa: E402
 
 db = get_db()
 criar_schema(db)
-email = input("E-mail do admin: ")
+login = input("Usuário do admin (mesmo usuário do SIGO): ")
 nome = input("Nome: ")
 senha = getpass.getpass("Senha (min. 8 caracteres): ")
 if len(senha) < auth.MIN_SENHA:
     sys.exit("Senha muito curta.")
-auth.criar_admin(db, email, nome, senha)
-print(f"Admin ativo em {db.nome}: {email.strip().lower()}")
+auth.criar_admin(db, login, nome, senha)
+print(f"Admin ativo em {db.nome}: {login.strip().lower()}")
