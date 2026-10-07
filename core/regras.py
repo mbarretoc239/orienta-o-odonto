@@ -56,6 +56,9 @@ def formatar_documento(doc: str) -> str:
 
 
 def acao_para(numero: int) -> str | None:
+    """CONTATO DIRETO a partir do limite; antes disso, FORMS em todo multiplo de 3."""
+    if exige_contato_direto(numero):
+        return "CONTATO DIRETO"
     return "FORMS" if numero > 0 and numero % ACAO_A_CADA == 0 else None
 
 

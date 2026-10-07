@@ -85,6 +85,8 @@ class TursoDb:
         if isinstance(v, int):
             return {"type": "integer", "value": str(v)}
         if isinstance(v, float):
+            if v != v:  # NaN (valor vazio do pandas) nao e JSON valido
+                return {"type": "null"}
             return {"type": "float", "value": v}
         return {"type": "text", "value": str(v)}
 
@@ -146,21 +148,56 @@ class TursoDb:
         return self.batch([(sql, args)])[0]
 
 
+class BancoNaoConfiguradoError(RuntimeError):
+    pass
+
+
+# Colunas acrescentadas depois da primeira versao: (tabela, coluna, definicao)
+COLUNAS_NOVAS = [
+    ("ori_usuarios", "tentativas", "INTEGER NOT NULL DEFAULT 0"),
+    ("ori_usuarios", "bloqueado_ate", "TEXT"),
+]
+
 _instancia = None
 
 
+def _config_turso():
+    """URL/token do Turso: ambiente (Streamlit Cloud), secrets.toml ou st.secrets."""
+    sec = _ler_secrets()
+    url = os.environ.get("TURSO_URL") or sec.get("TURSO_URL")
+    token = os.environ.get("TURSO_TOKEN") or sec.get("TURSO_TOKEN")
+    if not (url and token):
+        try:
+            import streamlit as st
+
+            url = url or st.secrets.get("TURSO_URL")
+            token = token or st.secrets.get("TURSO_TOKEN")
+        except Exception:  # noqa: BLE001 - sem streamlit/secrets
+            pass
+    return url, token
+
+
 def get_db():
-    """Turso se houver TURSO_URL/TURSO_TOKEN (secrets.toml ou ambiente); senao SQLite local."""
+    """Turso quando configurado. SQLite local so se ORI_DB_LOCAL for definido de forma explicita:
+    nunca cai em silencio para um banco temporario."""
     global _instancia
     if _instancia is None:
-        sec = _ler_secrets()
-        url = os.environ.get("TURSO_URL") or sec.get("TURSO_URL")
-        token = os.environ.get("TURSO_TOKEN") or sec.get("TURSO_TOKEN")
-        _instancia = TursoDb(url, token) if url and token else LocalDb(
-            os.environ.get("ORI_DB_LOCAL", LOCAL_PADRAO)
-        )
+        url, token = _config_turso()
+        if url and token:
+            _instancia = TursoDb(url, token)
+        elif os.environ.get("ORI_DB_LOCAL"):
+            _instancia = LocalDb(os.environ["ORI_DB_LOCAL"])
+        else:
+            raise BancoNaoConfiguradoError(
+                "Banco nao configurado: defina TURSO_URL e TURSO_TOKEN (secrets) "
+                "ou ORI_DB_LOCAL para desenvolvimento local."
+            )
     return _instancia
 
 
 def criar_schema(db) -> None:
     db.batch([(s, ()) for s in _declarar_schema()])
+    for tabela, coluna, definicao in COLUNAS_NOVAS:
+        existentes = {r["name"] for r in db.query(f"SELECT name FROM pragma_table_info('{tabela}')")}
+        if coluna not in existentes:
+            db.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")

@@ -10,6 +10,8 @@ import re
 PERFIS = ("contas", "gestor", "admin")
 _USUARIO = re.compile(r"^[a-z0-9][a-z0-9._-]{2,39}$")
 MIN_SENHA = 8
+MAX_TENTATIVAS = 5
+BLOQUEIO_MIN = 15
 
 
 def normalizar_usuario(usuario) -> str:
@@ -51,17 +53,44 @@ def registrar_usuario(db, usuario, nome, senha):
 
 
 def autenticar(db, usuario, senha):
-    """Retorna (usuario|None, mensagem)."""
+    """Retorna (usuario|None, mensagem). Apos MAX_TENTATIVAS erros a conta bloqueia por BLOQUEIO_MIN minutos."""
     usuario = normalizar_usuario(usuario)
-    linhas = db.query("SELECT * FROM ori_usuarios WHERE usuario=?", (usuario,))
-    if not linhas or not confere_senha(senha or "", linhas[0]["senha_hash"]):
+    linhas = db.query(
+        "SELECT *, MAX(0, CAST((julianday(bloqueado_ate) - julianday('now')) * 1440 AS INTEGER) + 1) AS min_restantes, "
+        "(bloqueado_ate IS NOT NULL AND bloqueado_ate > datetime('now')) AS bloqueado "
+        "FROM ori_usuarios WHERE usuario=?",
+        (usuario,),
+    )
+    if not linhas:
         return None, "Usuario ou senha incorretos."
     u = linhas[0]
+    if u["bloqueado"]:
+        return None, f"Muitas tentativas incorretas. Tente novamente em {u['min_restantes']} minuto(s)."
+    if not confere_senha(senha or "", u["senha_hash"]):
+        erros = (u["tentativas"] or 0) + 1
+        if erros >= MAX_TENTATIVAS:
+            db.execute(
+                "UPDATE ori_usuarios SET tentativas=0, bloqueado_ate=datetime('now', ?) WHERE usuario=?",
+                (f"+{BLOQUEIO_MIN} minutes", usuario),
+            )
+            return None, f"Muitas tentativas incorretas. Conta bloqueada por {BLOQUEIO_MIN} minutos."
+        db.execute("UPDATE ori_usuarios SET tentativas=? WHERE usuario=?", (erros, usuario))
+        return None, f"Usuario ou senha incorretos. Restam {MAX_TENTATIVAS - erros} tentativa(s)."
     if u["status"] == "pendente":
         return None, "Cadastro aguardando aprovacao do administrador."
     if u["status"] != "ativo":
         return None, "Usuario inativo."
+    if u["tentativas"] or u["bloqueado_ate"]:
+        db.execute("UPDATE ori_usuarios SET tentativas=0, bloqueado_ate=NULL WHERE usuario=?", (usuario,))
     return {"usuario": u["usuario"], "nome": u["nome"], "perfil": u["perfil"]}, ""
+
+
+def dados_usuario(db, usuario):
+    """Usuario ativo (para restaurar sessao); None se nao existir ou nao estiver ativo."""
+    r = db.query("SELECT usuario, nome, perfil, status FROM ori_usuarios WHERE usuario=?", (usuario,))
+    if not r or r[0]["status"] != "ativo":
+        return None
+    return {"usuario": r[0]["usuario"], "nome": r[0]["nome"], "perfil": r[0]["perfil"]}
 
 
 def criar_admin(db, usuario, nome, senha):

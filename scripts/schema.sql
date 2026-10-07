@@ -21,6 +21,14 @@ CREATE TABLE IF NOT EXISTS ori_usuarios (
   senha_hash TEXT NOT NULL,
   perfil TEXT NOT NULL DEFAULT 'contas' CHECK (perfil IN ('contas','gestor','admin')),
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','ativo','inativo')),
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS ori_sessoes (
+  token_hash TEXT PRIMARY KEY,
+  usuario TEXT NOT NULL,
+  expira_em TEXT NOT NULL,
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS ori_orientacoes (

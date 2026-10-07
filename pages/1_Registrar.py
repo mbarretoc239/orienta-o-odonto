@@ -1,16 +1,9 @@
-﻿from datetime import date
+from datetime import date
 
 import streamlit as st
 
-from core import servico
-from core.regras import (
-    LIMITE_CONTATO_DIRETO,
-    acao_para,
-    exige_contato_direto,
-    formatar_documento,
-    normalizar_documento,
-    rotulo_orientacao,
-)
+from core import orientacoes, prestadores
+from core.regras import formatar_documento, normalizar_documento
 from core.ui import db, desvios_ativos, erro_banco, exigir_login
 
 st.set_page_config(page_title="Registrar orientação", layout="centered")
@@ -18,61 +11,68 @@ usuario = exigir_login()
 st.title("Registrar orientação")
 
 
-@st.dialog("Contato direto com o prestador")
-def aviso_contato_direto(numero):
-    st.warning(
-        f"Prestador já conta com {numero} orientações. "
-        "Direcionar para contato direto por parte do credenciamento."
-    )
-    if st.button("Entendi"):
+@st.cache_data(ttl=120, show_spinner=False)
+def prestador_por_documento(doc):
+    return prestadores.buscar(db(), doc)
+
+
+def texto_contato_direto(numero):
+    return f"Prestador já conta com {numero} orientações. Direcionar para contato direto por parte do credenciamento."
+
+
+@st.dialog("Confirmar registro")
+def confirmar(prestador, desvio, previa, data, sinal, obs):
+    st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(prestador['documento'])}")
+    st.write(f"{desvio['nome']} · {previa['rotulo']} · {data.strftime('%d/%m/%Y')}"
+             + (f" · **AÇÃO: {previa['acao']}**" if previa["acao"] else ""))
+    if previa["contato_direto"]:
+        st.error(texto_contato_direto(previa["numero"]))
+    if st.button("Confirmar e registrar", type="primary"):
+        reg, msg = orientacoes.registrar(db(), usuario, prestador["documento"], desvio["id"], data, sinal, obs)
+        if not reg:
+            st.error(msg)
+            return
+        st.session_state["ultimo_registro"] = {
+            "numero": reg["numero_orientacao"], "acao": reg["acao"], "texto": desvio["texto_padrao"],
+        }
         st.rerun()
 
 
 if st.session_state.get("ultimo_registro"):
     r = st.session_state.pop("ultimo_registro")
-    st.success(f"{rotulo_orientacao(r['numero'])} registrada" + (" · AÇÃO: FORMS" if r["acao"] else "") + ".")
+    st.success(f"{r['numero']}ª orientação registrada" + (f" · AÇÃO: {r['acao']}" if r["acao"] else "") + ".")
     st.caption("Texto padrão para enviar ao prestador (use o ícone de copiar):")
     st.code(r["texto"], language=None, wrap_lines=True)
-    if exige_contato_direto(r["numero"]):
-        aviso_contato_direto(r["numero"])
 
 try:
     doc_txt = st.text_input("CNPJ/CPF do prestador", placeholder="Somente números ou com pontuação")
     doc = normalizar_documento(doc_txt)
-    prestador = servico.buscar_prestador(db(), doc) if doc else None
+    prestador = prestador_por_documento(doc) if doc else None
 
     if doc and not prestador:
         st.info("Documento não encontrado. Cadastre o prestador para continuar.")
         nome_novo = st.text_input("Nome do prestador")
         if st.button("Cadastrar prestador"):
-            ok, msg = servico.cadastrar_prestador(db(), usuario, doc, nome_novo)
+            ok, msg = prestadores.cadastrar(db(), usuario, doc, nome_novo)
             if ok:
+                prestador_por_documento.clear()
                 st.rerun()
             st.error(msg)
     elif prestador:
         st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(doc)}")
-        desvios = desvios_ativos()
-        desvio = st.selectbox("Desvio", desvios, format_func=lambda d: d["nome"], index=None, placeholder="Escolha o desvio")
+        desvio = st.selectbox("Desvio", desvios_ativos(), format_func=lambda d: d["nome"],
+                              index=None, placeholder="Escolha o desvio")
         if desvio:
-            numero = servico.proximo_numero(db(), doc, desvio["id"])
+            previa = orientacoes.previa(db(), doc, desvio["id"])
             c1, c2 = st.columns(2)
-            c1.metric("Orientação", rotulo_orientacao(numero))
-            c2.metric("Ação", acao_para(numero) or "—")
-            if exige_contato_direto(numero):
-                st.warning(f"Prestador já conta com {numero - 1} orientações neste desvio. "
-                           "Direcionar para contato direto por parte do credenciamento.")
+            c1.metric("Orientação", previa["rotulo"])
+            c2.metric("Ação", previa["acao"] or "—")
+            if previa["contato_direto"]:
+                st.error(texto_contato_direto(previa["numero"]))
             data = st.date_input("Data da orientação", value=date.today(), format="DD/MM/YYYY")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True)
             obs = st.text_area("Observação (opcional)")
             if st.button("Salvar orientação", type="primary"):
-                reg, msg = servico.registrar_orientacao(
-                    db(), usuario, doc, desvio["id"], data, None if sinal == "—" else sinal, obs
-                )
-                if reg:
-                    st.session_state["ultimo_registro"] = {
-                        "numero": reg["numero_orientacao"], "acao": reg["acao"], "texto": desvio["texto_padrao"],
-                    }
-                    st.rerun()
-                st.error(msg)
+                confirmar(prestador, desvio, previa, data, None if sinal == "—" else sinal, obs)
 except Exception as e:  # noqa: BLE001
     erro_banco(e)

@@ -1,17 +1,17 @@
 import streamlit as st
 
 from core import auth
-from core.ui import db
+from core.ui import db, encerrar_sessao, iniciar_sessao, restaurar_sessao
 
 st.set_page_config(page_title="Orientações a Prestadores", layout="centered")
 st.title("Orientações a Prestadores")
 
+restaurar_sessao()
 u = st.session_state.get("usuario")
 if u:
     st.success(f"Olá, {u['nome']}. Use o menu à esquerda para registrar ou consultar orientações.")
     if st.button("Sair"):
-        st.session_state.pop("usuario", None)
-        st.rerun()
+        encerrar_sessao()
     st.stop()
 
 entrar, cadastrar = st.tabs(["Entrar", "Primeiro acesso"])
@@ -23,8 +23,7 @@ with entrar:
         if st.form_submit_button("Entrar", type="primary"):
             usuario, msg = auth.autenticar(db(), login, senha)
             if usuario:
-                st.session_state["usuario"] = usuario
-                st.rerun()
+                iniciar_sessao(usuario)
             st.error(msg)
 
 with cadastrar:
