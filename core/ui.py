@@ -22,11 +22,28 @@ def db():
         st.stop()
 
 
+def _cookies_do_navegador():
+    """Cookies lidos NO NAVEGADOR por um componente. None enquanto o navegador nao respondeu; depois um dict.
+    No Streamlit Cloud o servidor nao recebe cookies (st.context.cookies vem vazio), entao a leitura tem de
+    ser feita pelo navegador."""
+    from streamlit_cookies_controller.cookie_controller import _cookie_controller
+
+    cookies = _cookie_controller(method="getAll", key="ori_cookies_navegador", default=None)
+    st.session_state["_cookies_navegador"] = cookies  # copia para o diagnostico (a chave do componente e dele)
+    return cookies
+
+
 def restaurar_sessao():
-    """Se a pessoa recarregou a pagina, recupera o login a partir do cookie (valido por 8h)."""
+    """Se a pessoa recarregou a pagina, recupera o login a partir do cookie (valido por 8h).
+    A primeira execucao depois do F5 espera o navegador informar os cookies; o componente dispara a
+    reexecucao assim que responde."""
     if st.session_state.get("usuario"):
         return
-    token = st.context.cookies.get(sessao.COOKIE)
+    cookies = _cookies_do_navegador()
+    if cookies is None:
+        st.caption("Carregando sessão…")
+        st.stop()
+    token = cookies.get(sessao.COOKIE)
     nome = sessao.usuario_da_sessao(db(), token)
     usuario = auth.dados_usuario(db(), nome) if nome else None
     if usuario:
@@ -59,11 +76,13 @@ def diagnostico_sessao():
     """Abra o app com ?diag=1 para ver onde a sessao se perde depois do F5 (nao mostra o token)."""
     if not st.query_params.get("diag"):
         return
-    token = st.context.cookies.get(sessao.COOKIE)
+    navegador = st.session_state.get("_cookies_navegador")  # lidos pelo componente (None se ja estava logado)
+    token = (navegador or {}).get(sessao.COOKIE)
     with st.expander("Diagnóstico de sessão", expanded=True):
         st.write({
             "cookies que o servidor recebeu": sorted(st.context.cookies.keys()),
-            "cookie ori_sessao chegou ao servidor": bool(token),
+            "cookies lidos no navegador (componente)": None if navegador is None else sorted(navegador.keys()),
+            "cookie ori_sessao existe no navegador": bool(token),
             "sessao valida no banco": bool(sessao.usuario_da_sessao(db(), token)),
             "usuario na sessao do Streamlit": (st.session_state.get("usuario") or {}).get("usuario"),
             "host": st.context.headers.get("Host"),
@@ -95,7 +114,7 @@ def aplicar_cookie_pendente():
 
 
 def encerrar_sessao():
-    token = st.session_state.pop("token_sessao", None) or st.context.cookies.get(sessao.COOKIE)
+    token = st.session_state.pop("token_sessao", None)
     sessao.encerrar(db(), token)  # o token deixa de valer no banco, mesmo que o cookie fique no navegador
     st.session_state.pop("usuario", None)
     _gravar_cookie("", 0)
