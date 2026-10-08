@@ -4,11 +4,12 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-from core import orientacoes
+from core import marca, orientacoes
 from core.exportacao import blindar_formulas
 from core.ui import consulta_orientacoes, db, desvios_ativos, erro_banco, exigir_login
 
-st.set_page_config(page_title="Consultar orientações", layout="wide")
+st.set_page_config(page_title="Consultar orientações", layout="wide", page_icon=marca.ICONE)
+marca.aplicar()
 usuario = exigir_login()
 pode_editar = usuario["perfil"] in orientacoes.PODE_EDITAR
 st.title("Consultar orientações")

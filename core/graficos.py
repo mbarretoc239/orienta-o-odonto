@@ -1,7 +1,7 @@
 """Graficos do painel (Altair), seguindo o metodo de dataviz: uma cor por trabalho, marcas finas, grade discreta,
 claro e escuro escolhidos (nao invertidos) e cada grafico com a sua tabela ao lado.
 
-Paleta validada com o validador da skill de dataviz (3 series, claro e escuro: todas as verificacoes passam; o
+Paleta (azul e laranja da marca) validada com o validador da skill de dataviz (3 series, claro e escuro: todas as verificacoes passam; o
 verde-agua no claro fica abaixo de 3:1 de contraste, por isso toda serie tem legenda visivel e tabela).
 """
 import altair as alt
@@ -12,14 +12,14 @@ _MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", 
 
 CLARO = {
     "texto": "#0b0b0b", "texto2": "#52514e", "mudo": "#898781", "grade": "#e1e0d9", "base": "#c3c2b7",
-    "superficie": "#ffffff", "series": ["#2a78d6", "#eb6834", "#1baf7a"],
+    "superficie": "#ffffff", "series": ["#2b52c8", "#eb6834", "#1baf7a"],
     # sequencial azul: o valor mais baixo (quase zero) recua para a superficie
-    "sequencial": ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"],
+    "sequencial": ["#dbe3fb", "#a9bcf3", "#6b8cf2", "#2b52c8", "#1539aa"],
 }
 ESCURO = {
     "texto": "#ffffff", "texto2": "#c3c2b7", "mudo": "#898781", "grade": "#2c2c2a", "base": "#383835",
-    "superficie": "#0e1117", "series": ["#3987e5", "#d95926", "#199e70"],
-    "sequencial": ["#0d366b", "#184f95", "#256abf", "#6da7ec", "#b7d3f6"],
+    "superficie": "#0e1117", "series": ["#6b8cf2", "#d95926", "#199e70"],
+    "sequencial": ["#16296b", "#1f3f9e", "#3a5fd0", "#7f9bf3", "#c3d0fa"],
 }
 
 

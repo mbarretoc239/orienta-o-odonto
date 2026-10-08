@@ -1,6 +1,6 @@
 import streamlit as st
 
-from core import auth
+from core import auth, marca
 from core.ui import (
     aplicar_cookie_pendente,
     db,
@@ -11,7 +11,8 @@ from core.ui import (
     restaurar_sessao,
 )
 
-st.set_page_config(page_title="Orientações a Prestadores", layout="centered")
+st.set_page_config(page_title="Orientações a Prestadores", layout="centered", page_icon=marca.ICONE)
+marca.aplicar()
 st.title("Orientações a Prestadores")
 
 AVISO_CODIGO = ("Guarde este código em local seguro. Ele é a única forma de redefinir sua senha sem o "

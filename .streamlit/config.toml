@@ -1,0 +1,12 @@
+# Cores da marca (logo Hapvida +odonto): azul #1539AA, laranja #FF4E05, vermelho #FF222B, #FF8800 e amarelo #FFCC23.
+[theme.light]
+primaryColor = "#1539aa"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f3fc"
+textColor = "#0b0b0b"
+
+[theme.dark]
+primaryColor = "#5a7ff0"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#171c2a"
+textColor = "#ffffff"

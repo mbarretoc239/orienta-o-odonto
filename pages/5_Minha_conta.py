@@ -1,9 +1,10 @@
 import streamlit as st
 
-from core import auth, sessao
+from core import auth, marca, sessao
 from core.ui import db, erro_banco, exigir_login, mostrar_segredo
 
-st.set_page_config(page_title="Minha conta", layout="centered")
+st.set_page_config(page_title="Minha conta", layout="centered", page_icon=marca.ICONE)
+marca.aplicar()
 usuario = exigir_login()
 st.title("Minha conta")
 st.write(f"**{usuario['nome']}** · usuário `{usuario['usuario']}` · perfil **{usuario['perfil']}**")

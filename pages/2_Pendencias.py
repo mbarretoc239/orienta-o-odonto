@@ -3,11 +3,12 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from core import tarefas
+from core import marca, tarefas
 from core.regras import rotulo_orientacao
 from core.ui import db, erro_banco, exigir_login, limpar_contagens
 
-st.set_page_config(page_title="Pendências", layout="wide")
+st.set_page_config(page_title="Pendências", layout="wide", page_icon=marca.ICONE)
+marca.aplicar()
 usuario = exigir_login()
 ver_todas = usuario["perfil"] in tarefas.PODE_VER_TODAS
 st.title("Pendências")

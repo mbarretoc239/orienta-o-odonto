@@ -4,11 +4,12 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-from core import auditoria, auth, backup, desvios, logs, prestadores, textos, usuarios
+from core import auditoria, auth, backup, desvios, logs, marca, prestadores, textos, usuarios
 from core.exportacao import blindar_formulas
 from core.ui import db, erro_banco, exigir_login, limpar_contagens, mostrar_segredo
 
-st.set_page_config(page_title="Administração", layout="wide")
+st.set_page_config(page_title="Administração", layout="wide", page_icon=marca.ICONE)
+marca.aplicar()
 admin = exigir_login(perfis=("admin",))
 st.title("Administração")
 

@@ -4,11 +4,12 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-from core import graficos, painel, tarefas
+from core import graficos, marca, painel, tarefas
 from core.exportacao import blindar_formulas
 from core.ui import db, erro_banco, exigir_login
 
-st.set_page_config(page_title="Painel gerencial", layout="wide")
+st.set_page_config(page_title="Painel gerencial", layout="wide", page_icon=marca.ICONE)
+marca.aplicar()
 usuario = exigir_login(perfis=("gestor", "admin"))
 st.title("Painel gerencial")
 

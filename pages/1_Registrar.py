@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from core import orientacoes, prestadores, tarefas, textos
+from core import marca, orientacoes, prestadores, tarefas, textos
 from core.config import url_forms
 from core.regras import formatar_documento, normalizar_documento, rotulo_orientacao
 from core.ui import (
@@ -16,7 +16,8 @@ from core.ui import (
     link_pagina,
 )
 
-st.set_page_config(page_title="Registrar orientação", layout="centered")
+st.set_page_config(page_title="Registrar orientação", layout="centered", page_icon=marca.ICONE)
+marca.aplicar()
 usuario = exigir_login()
 st.title("Registrar orientação")
 
