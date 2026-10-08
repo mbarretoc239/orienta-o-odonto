@@ -15,5 +15,6 @@ nome = input("Nome: ")
 senha = getpass.getpass("Senha (min. 8 caracteres): ")
 if len(senha) < auth.MIN_SENHA:
     sys.exit("Senha muito curta.")
-auth.criar_admin(db, login, nome, senha)
+codigo = auth.criar_admin(db, login, nome, senha)
 print(f"Admin ativo em {db.nome}: {login.strip().lower()}")
+print(f"Codigo de recuperacao (guarde, nao sera mostrado de novo): {codigo}")

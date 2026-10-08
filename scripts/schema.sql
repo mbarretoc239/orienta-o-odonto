@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS ori_usuarios (
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','ativo','inativo')),
   tentativas INTEGER NOT NULL DEFAULT 0,
   bloqueado_ate TEXT,
+  codigo_hash TEXT,
+  trocar_senha INTEGER NOT NULL DEFAULT 0,
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS ori_sessoes (

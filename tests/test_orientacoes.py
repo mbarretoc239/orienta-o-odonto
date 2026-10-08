@@ -48,11 +48,18 @@ def test_edicao_so_gestor_e_audita(db):
     assert db.query("SELECT 1 FROM ori_auditoria WHERE acao='UPDATE' AND antes LIKE '%2026-01-01%'")
 
 
+def test_so_gestor_e_admin_cadastram_prestador(db):
+    ok, msg = prestadores.cadastrar(db, USR, CPF_OK, "MARIA")
+    assert not ok and msg == "Prestador não cadastrado, contate o gestor para verificar."
+    assert prestadores.buscar(db, CPF_OK) is None
+    assert prestadores.cadastrar(db, {**USR, "perfil": "admin"}, CPF_OK, "MARIA")[0]
+
+
 def test_cadastro_e_renomear_prestador(db):
-    assert not prestadores.cadastrar(db, USR, "123", "X")[0]
-    assert prestadores.cadastrar(db, USR, CPF_OK, "  maria  da silva ")[0]
+    assert not prestadores.cadastrar(db, GESTOR, "123", "X")[0]
+    assert prestadores.cadastrar(db, GESTOR, CPF_OK, "  maria  da silva ")[0]
     assert prestadores.buscar(db, CPF_OK)["nome"] == "MARIA DA SILVA"
-    assert not prestadores.cadastrar(db, USR, CPF_OK, "outro")[0]
+    assert not prestadores.cadastrar(db, GESTOR, CPF_OK, "outro")[0]
     assert prestadores.renomear(db, GESTOR, CPF_OK, "maria da silva souza")[0]
     assert prestadores.buscar(db, CPF_OK)["nome"] == "MARIA DA SILVA SOUZA"
     assert prestadores.buscar_por_nome(db, "silva souza")[0]["documento"] == CPF_OK

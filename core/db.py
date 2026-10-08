@@ -156,6 +156,8 @@ class BancoNaoConfiguradoError(RuntimeError):
 COLUNAS_NOVAS = [
     ("ori_usuarios", "tentativas", "INTEGER NOT NULL DEFAULT 0"),
     ("ori_usuarios", "bloqueado_ate", "TEXT"),
+    ("ori_usuarios", "codigo_hash", "TEXT"),
+    ("ori_usuarios", "trocar_senha", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 _instancia = None

@@ -3,6 +3,10 @@ from core import auditoria
 from core.regras import normalizar_documento, valida_documento
 
 
+PODE_CADASTRAR = ("gestor", "admin")
+MSG_NAO_CADASTRADO = "Prestador não cadastrado, contate o gestor para verificar."
+
+
 def padronizar_nome(nome) -> str:
     return " ".join((nome or "").upper().split())
 
@@ -24,7 +28,9 @@ def buscar_por_nome(db, termo, limite=50):
 
 
 def cadastrar(db, usuario, documento, nome):
-    """Cadastro de prestador fora da base. Retorna (ok, mensagem)."""
+    """Cadastro de prestador fora da base (so gestor e admin). Retorna (ok, mensagem)."""
+    if usuario["perfil"] not in PODE_CADASTRAR:
+        return False, MSG_NAO_CADASTRADO
     doc = normalizar_documento(documento)
     nome = padronizar_nome(nome)
     if not valida_documento(doc):

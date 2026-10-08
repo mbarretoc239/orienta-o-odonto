@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from core import auth, desvios, prestadores, usuarios
-from core.ui import db, erro_banco, exigir_login
+from core.ui import db, erro_banco, exigir_login, mostrar_segredo
 
 st.set_page_config(page_title="Administração", layout="wide")
 admin = exigir_login(perfis=("admin",))
@@ -19,7 +19,7 @@ try:
             atual = next(u for u in lista if u["usuario"] == login)
             perfil = st.selectbox("Perfil", auth.PERFIS, index=auth.PERFIS.index(atual["perfil"]))
             status = st.selectbox("Status", usuarios.STATUS, index=usuarios.STATUS.index(atual["status"]))
-            c1, c2, _ = st.columns([1, 1, 4])
+            c1, c2, c3, c4 = st.columns(4)
             if c1.button("Salvar usuário", type="primary"):
                 ok, msg = usuarios.atualizar(db(), admin, login, perfil, status)
                 (st.success if ok else st.error)(msg)
@@ -28,6 +28,14 @@ try:
             if c2.button("Desbloquear login"):
                 usuarios.desbloquear(db(), login)
                 st.success("Tentativas zeradas.")
+            if c3.button("Redefinir senha"):
+                st.session_state["segredo_admin"] = (
+                    f"Usuário: {login}\nSenha temporária: {usuarios.redefinir_senha(db(), admin, login)}")
+            if c4.button("Novo código de recuperação"):
+                st.session_state["segredo_admin"] = (
+                    f"Usuário: {login}\nCódigo: {usuarios.gerar_codigo_recuperacao(db(), admin, login)}")
+        mostrar_segredo("segredo_admin", "Entregue à pessoa (não será mostrado novamente)",
+                        "A senha temporária obriga a troca no próximo acesso e encerra as sessões abertas dela.")
 
     with aba_d:
         for d in desvios.listar(db(), so_ativos=False):

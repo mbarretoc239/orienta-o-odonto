@@ -58,6 +58,20 @@ def encerrar_sessao():
     st.rerun()
 
 
+def mostrar_segredo(chave: str, titulo: str, aviso: str):
+    """Exibe um segredo gerado (codigo/senha temporaria) ate a pessoa confirmar que guardou."""
+    valor = st.session_state.get(chave)
+    if not valor:
+        return
+    with st.container(border=True):
+        st.markdown(f"**{titulo}**")
+        st.code(valor, language=None)
+        st.warning(aviso)
+        if st.button("Já guardei", key=f"ok_{chave}"):
+            st.session_state.pop(chave, None)
+            st.rerun()
+
+
 def exigir_login(perfis=None):
     """Para a execucao da pagina se nao houver usuario logado com um dos perfis."""
     restaurar_sessao()
@@ -65,6 +79,10 @@ def exigir_login(perfis=None):
     if not u:
         st.warning("Faça login na página inicial.")
         st.page_link("app.py", label="Ir para o login")
+        st.stop()
+    if u.get("trocar_senha"):
+        st.warning("Defina uma nova senha antes de continuar.")
+        st.page_link("app.py", label="Trocar senha")
         st.stop()
     if perfis and u["perfil"] not in perfis:
         st.error("Você não tem permissão para acessar esta página.")
