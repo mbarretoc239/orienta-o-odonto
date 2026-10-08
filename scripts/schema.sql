@@ -13,7 +13,15 @@ CREATE TABLE IF NOT EXISTS ori_desvios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nome TEXT NOT NULL UNIQUE,
   texto_padrao TEXT NOT NULL DEFAULT '',
-  ativo INTEGER NOT NULL DEFAULT 1
+  ativo INTEGER NOT NULL DEFAULT 1,
+  resumo TEXT,
+  titulo TEXT,
+  corpo TEXT,
+  fechamento_tipo TEXT
+);
+CREATE TABLE IF NOT EXISTS ori_textos (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ori_usuarios (
   usuario TEXT PRIMARY KEY,

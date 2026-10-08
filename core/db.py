@@ -159,6 +159,10 @@ COLUNAS_NOVAS = [
     ("ori_usuarios", "codigo_hash", "TEXT"),
     ("ori_usuarios", "trocar_senha", "INTEGER NOT NULL DEFAULT 0"),
     ("ori_orientacoes", "lote_id", "TEXT"),
+    ("ori_desvios", "resumo", "TEXT"),
+    ("ori_desvios", "titulo", "TEXT"),
+    ("ori_desvios", "corpo", "TEXT"),
+    ("ori_desvios", "fechamento_tipo", "TEXT"),
 ]
 
 _instancia = None

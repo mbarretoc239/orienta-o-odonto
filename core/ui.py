@@ -3,7 +3,7 @@ import json
 
 import streamlit as st
 
-from core import auth, sessao
+from core import auth, sessao, textos
 from core.db import BancoNaoConfiguradoError, TursoIndisponivelError, criar_schema, get_db
 
 
@@ -11,6 +11,7 @@ from core.db import BancoNaoConfiguradoError, TursoIndisponivelError, criar_sche
 def _banco():
     d = get_db()
     criar_schema(d)
+    textos.preencher_estrutura(d)
     return d
 
 

@@ -2,7 +2,7 @@ from datetime import date
 
 import streamlit as st
 
-from core import orientacoes, prestadores
+from core import orientacoes, prestadores, textos
 from core.config import url_forms
 from core.regras import formatar_documento, normalizar_documento, rotulo_orientacao
 from core.ui import db, desvios_ativos, erro_banco, exigir_login
@@ -86,26 +86,32 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
             st.error(msg)
             return
         por_id = {d["id"]: d for d in escolhidos}
-        st.session_state["ultimo_registro"] = [
-            {"desvio": por_id[r["desvio_id"]]["nome"], "numero": r["numero_orientacao"], "acao": r["acao"],
-             "texto": por_id[r["desvio_id"]]["texto_padrao"]}
-            for r in regs
-        ]
+        st.session_state["ultimo_registro"] = {
+            "itens": [
+                {"desvio": por_id[r["desvio_id"]]["nome"], "numero": r["numero_orientacao"], "acao": r["acao"],
+                 "data": r["data_orientacao"], "prestador": prestador["nome"], "documento": prestador["documento"]}
+                for r in regs
+            ],
+            "mensagem": textos.montar_mensagem([por_id[r["desvio_id"]] for r in regs], textos.carregar_gerais(db())),
+        }
         st.rerun()
 
 
 if st.session_state.get("ultimo_registro"):
-    itens = st.session_state.pop("ultimo_registro")
+    ultimo = st.session_state.pop("ultimo_registro")
+    itens, mensagem = ultimo["itens"], ultimo["mensagem"]
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
     controle_blocos(itens, "pos")
     for i in itens:
         bloco_desvio(i, "pos")
     botao_forms_grupo(itens, "forms_pos_registro")
-    st.caption("Texto padrão para enviar ao prestador (use o ícone de copiar):")
-    for i in itens:
-        if len(itens) > 1:
-            st.markdown(f"**{i['desvio']}**")
-        st.code(i["texto"], language=None, wrap_lines=True)
+    com_forms = [i for i in itens if i["acao"] == "FORMS"]
+    if com_forms:
+        st.caption("Texto-base do relato do FORMS (use o ícone de copiar e continue o relato no formulário):")
+        st.code(textos.relato_forms(com_forms[0]["prestador"], com_forms[0]["documento"], com_forms),
+                language=None, wrap_lines=True)
+    st.caption("Texto para enviar ao prestador (use o ícone de copiar):")
+    st.code(mensagem, language=None, wrap_lines=True)
 
 try:
     doc_txt = st.text_input("CNPJ/CPF do prestador", placeholder="Somente números ou com pontuação")

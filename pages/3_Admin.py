@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from core import auth, desvios, prestadores, usuarios
+from core import auth, desvios, prestadores, textos, usuarios
 from core.ui import db, erro_banco, exigir_login, mostrar_segredo
 
 st.set_page_config(page_title="Administração", layout="wide")
@@ -38,12 +38,36 @@ try:
                         "A senha temporária obriga a troca no próximo acesso e encerra as sessões abertas dela.")
 
     with aba_d:
+        with st.expander("Textos gerais da mensagem com mais de um desvio"):
+            st.caption("Usados só quando 2 ou mais desvios são registrados juntos. Em {desvios}, entram os "
+                       "resumos de cada desvio.")
+            gerais = textos.carregar_gerais(db())
+            novos = {
+                "saudacao": st.text_input("Saudação", gerais["saudacao"]),
+                "abertura": st.text_area("Frase de abertura", gerais["abertura"], height=90),
+                "fechamento": st.text_area("Fechamento padrão", gerais["fechamento"], height=140),
+                "fechamento_imagens": st.text_area("Fechamento (desvios com imagens/anexos)",
+                                                   gerais["fechamento_imagens"], height=140),
+            }
+            if st.button("Salvar textos gerais", key="salvar_gerais"):
+                textos.salvar_gerais(db(), novos)
+                st.success("Textos gerais atualizados.")
+
         for d in desvios.listar(db(), so_ativos=False):
             with st.expander(d["nome"] + ("" if d["ativo"] else " (inativo)")):
-                texto = st.text_area("Texto padrão", d["texto_padrao"], key=f"t{d['id']}", height=200)
+                texto = st.text_area("Texto padrão (usado quando só este desvio é registrado)", d["texto_padrao"],
+                                     key=f"t{d['id']}", height=200)
+                st.caption("Para a mensagem com mais de um desvio:")
+                resumo = st.text_input("Resumo (entra na frase de abertura)", d["resumo"] or "", key=f"r{d['id']}")
+                titulo = st.text_input("Título da orientação", d["titulo"] or "", key=f"ti{d['id']}")
+                corpo = st.text_area("Corpo da orientação", d["corpo"] or "", key=f"c{d['id']}", height=140)
+                tipos = ["padrao", "imagens", "nenhum"]
+                atual = d["fechamento_tipo"] or "nenhum"
+                tipo = st.selectbox("Fechamento", tipos, index=tipos.index(atual), key=f"f{d['id']}")
                 ativo = st.checkbox("Ativo", bool(d["ativo"]), key=f"a{d['id']}")
                 if st.button("Salvar", key=f"s{d['id']}"):
-                    desvios.atualizar(db(), d["id"], texto, ativo)
+                    desvios.atualizar(db(), d["id"], texto, ativo, resumo or None, titulo, corpo,
+                                      None if tipo == "nenhum" else tipo)
                     st.cache_data.clear()
                     st.success("Desvio atualizado.")
         with st.form("novo_desvio", clear_on_submit=True):
