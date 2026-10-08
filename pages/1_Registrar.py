@@ -4,7 +4,7 @@ import streamlit as st
 
 from core import orientacoes, prestadores
 from core.config import url_forms
-from core.regras import formatar_documento, normalizar_documento
+from core.regras import formatar_documento, normalizar_documento, rotulo_orientacao
 from core.ui import db, desvios_ativos, erro_banco, exigir_login
 
 st.set_page_config(page_title="Registrar orientação", layout="centered")
@@ -30,19 +30,28 @@ def botao_forms(chave):
         st.caption("Link do FORMS não configurado (FORMS_URL nos secrets).")
 
 
-def avisos_de_acao(itens, chave):
-    """Cada desvio tem a propria acao: contato direto para uns, um unico FORMS para os que o exigem."""
-    contato = [i for i in itens if i["acao"] == "CONTATO DIRETO"]
+def bloco_desvio(i):
+    """Um bloco por desvio (mesmo layout para um ou varios): orientacao, acao e o aviso daquele desvio."""
+    with st.container(border=True):
+        st.markdown(f"**{i['desvio']}**")
+        c1, c2 = st.columns(2)
+        c1.metric("Orientação", rotulo_orientacao(i["numero"]))
+        c2.metric("Ação", i["acao"] or "—")
+        if i["acao"] == "CONTATO DIRETO":
+            st.error(f"Prestador já conta com {i['numero']} orientações. "
+                     "Direcionar para contato direto por parte do credenciamento.")
+        elif i["acao"] == "FORMS":
+            st.info("Exige o preenchimento do FORMS.")
+
+
+def botao_forms_grupo(itens, chave):
+    """Um unico FORMS cobre todos os desvios que o exigem."""
     forms = [i for i in itens if i["acao"] == "FORMS"]
-    for i in contato:
-        prefixo = f"{i['desvio']}: " if len(itens) > 1 else ""
-        st.error(f"{prefixo}Prestador já conta com {i['numero']} orientações. "
-                 "Direcionar para contato direto por parte do credenciamento.")
-    if forms:
-        nomes = "; ".join(i["desvio"] for i in forms)
-        st.info(f"Exige o preenchimento do FORMS ({nomes})." if len(forms) == 1
-                else f"Exige um FORMS cobrindo estes desvios: {nomes}.")
-        botao_forms(chave)
+    if not forms:
+        return
+    if len(forms) > 1:
+        st.info("Um único FORMS cobre estes desvios: " + "; ".join(i["desvio"] for i in forms) + ".")
+    botao_forms(chave)
 
 
 @st.dialog("Confirmar registro")
@@ -74,8 +83,8 @@ if st.session_state.get("ultimo_registro"):
     itens = st.session_state.pop("ultimo_registro")
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
     for i in itens:
-        st.write(f"• {i['desvio']} · {i['numero']}ª orientação" + (f" · AÇÃO: {i['acao']}" if i["acao"] else ""))
-    avisos_de_acao(itens, "forms_pos_registro")
+        bloco_desvio(i)
+    botao_forms_grupo(itens, "forms_pos_registro")
     st.caption("Texto padrão para enviar ao prestador (use o ícone de copiar):")
     for i in itens:
         if len(itens) > 1:
@@ -128,15 +137,9 @@ try:
             for d in escolhidos:
                 p = orientacoes.previa(db(), doc, d["id"])
                 itens.append({"desvio": d["nome"], "numero": p["numero"], "rotulo": p["rotulo"], "acao": p["acao"]})
-            if len(itens) == 1:
-                c1, c2 = st.columns(2)
-                c1.metric("Orientação", itens[0]["rotulo"])
-                c2.metric("Ação", itens[0]["acao"] or "—")
-            else:
-                st.dataframe(
-                    [{"Desvio": i["desvio"], "Orientação": i["rotulo"], "Ação": i["acao"] or "—"} for i in itens],
-                    hide_index=True, width="stretch")
-            avisos_de_acao(itens, "forms_previa")
+            for i in itens:
+                bloco_desvio(i)
+            botao_forms_grupo(itens, "forms_previa")
             data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True)
             obs = st.text_area("Observação (opcional)")
