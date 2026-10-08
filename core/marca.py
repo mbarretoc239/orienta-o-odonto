@@ -12,7 +12,11 @@ CORES = ["#1539aa", "#ff222b", "#ff4e05", "#ff8800", "#ffcc23"]
 
 _FAIXA = (
     "<style>[data-testid='stHeader']{border-bottom:3px solid transparent;border-image:linear-gradient(90deg,"
-    + ",".join(CORES) + ") 1;}</style>"
+    + ",".join(CORES) + ") 1;}"
+    # logo da barra lateral aberta: preenche o bloco de cima (size="large" ainda e pequeno); nao afeta o icone recolhido
+    "[data-testid='stSidebarHeader']{height:auto;min-height:6rem;padding-top:1rem;padding-bottom:0.5rem;}"
+    "[data-testid='stSidebarLogo']{height:5rem !important;max-width:100% !important;width:auto !important;"
+    "object-fit:contain;}</style>"
 )
 
 
