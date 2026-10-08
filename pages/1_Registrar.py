@@ -30,10 +30,25 @@ def botao_forms(chave):
         st.caption("Link do FORMS não configurado (FORMS_URL nos secrets).")
 
 
-def bloco_desvio(i):
-    """Um bloco por desvio (mesmo layout para um ou varios): orientacao, acao e o aviso daquele desvio."""
-    with st.container(border=True):
-        st.markdown(f"**{i['desvio']}**")
+def alternar_blocos():
+    """'Minimizar todos' / 'Expandir todos': a nova versao recria os expansores no estado escolhido."""
+    st.session_state["blocos_abertos"] = not st.session_state.get("blocos_abertos", True)
+    st.session_state["blocos_versao"] = st.session_state.get("blocos_versao", 0) + 1
+
+
+def controle_blocos(itens, chave):
+    if len(itens) > 1:
+        aberto = st.session_state.get("blocos_abertos", True)
+        st.button("Minimizar todos" if aberto else "Expandir todos", key=f"alternar_{chave}",
+                  on_click=alternar_blocos)
+
+
+def bloco_desvio(i, chave):
+    """Um bloco expansivel por desvio (mesmo layout para um ou varios): orientacao, acao e o aviso do desvio.
+    Fechado, o titulo mostra o resumo. Por padrao todos abrem expandidos."""
+    resumo = f"**{i['desvio']}** · {rotulo_orientacao(i['numero'])} · AÇÃO: {i['acao'] or '—'}"
+    chave_exp = f"exp_{chave}_{i['desvio']}_{st.session_state.get('blocos_versao', 0)}"
+    with st.expander(resumo, expanded=st.session_state.get("blocos_abertos", True), key=chave_exp):
         c1, c2 = st.columns(2)
         c1.metric("Orientação", rotulo_orientacao(i["numero"]))
         c2.metric("Ação", i["acao"] or "—")
@@ -82,8 +97,9 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
 if st.session_state.get("ultimo_registro"):
     itens = st.session_state.pop("ultimo_registro")
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
+    controle_blocos(itens, "pos")
     for i in itens:
-        bloco_desvio(i)
+        bloco_desvio(i, "pos")
     botao_forms_grupo(itens, "forms_pos_registro")
     st.caption("Texto padrão para enviar ao prestador (use o ícone de copiar):")
     for i in itens:
@@ -137,8 +153,9 @@ try:
             for d in escolhidos:
                 p = orientacoes.previa(db(), doc, d["id"])
                 itens.append({"desvio": d["nome"], "numero": p["numero"], "rotulo": p["rotulo"], "acao": p["acao"]})
+            controle_blocos(itens, "previa")
             for i in itens:
-                bloco_desvio(i)
+                bloco_desvio(i, "previa")
             botao_forms_grupo(itens, "forms_previa")
             data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True)

@@ -1,5 +1,5 @@
 """Helpers de interface: conexao, sessao persistente, guarda de login/perfil e barra lateral."""
-import time
+import json
 
 import streamlit as st
 
@@ -34,28 +34,37 @@ def restaurar_sessao():
         st.session_state["token_sessao"] = token
 
 
-def _cookies():
-    from streamlit_cookies_controller import CookieController
-
-    return CookieController()
+def _gravar_cookie(token: str, max_age: int):
+    """Grava o cookie direto na pagina (sem componente nem espera). Chamar sem st.rerun() logo em seguida,
+    para o navegador executar o script antes de a pagina ser redesenhada."""
+    cookie = json.dumps(f"{sessao.COOKIE}={token}; path=/; max-age={int(max_age)}; SameSite=Lax")
+    st.html(f"<script>document.cookie = {cookie} + (location.protocol === 'https:' ? '; Secure' : '');</script>",
+            unsafe_allow_javascript=True)
 
 
 def iniciar_sessao(usuario: dict):
+    """Cria a sessao (8h). O cookie e gravado por aplicar_cookie_pendente(), chamado fora de qualquer
+    container que a pagina esvazie (senao o navegador descarta o script antes de executar)."""
     token = sessao.criar(db(), usuario["usuario"])
     st.session_state["usuario"] = usuario
     st.session_state["token_sessao"] = token
-    _cookies().set(sessao.COOKIE, token, max_age=sessao.DURACAO_H * 3600, same_site="lax")
-    time.sleep(1)  # deixa o navegador gravar o cookie antes do rerun
-    st.rerun()
+    st.session_state["cookie_pendente"] = token
+
+
+def aplicar_cookie_pendente():
+    token = st.session_state.pop("cookie_pendente", None)
+    if token:
+        _gravar_cookie(token, sessao.DURACAO_H * 3600)
 
 
 def encerrar_sessao():
     token = st.session_state.pop("token_sessao", None) or st.context.cookies.get(sessao.COOKIE)
-    sessao.encerrar(db(), token)
+    sessao.encerrar(db(), token)  # o token deixa de valer no banco, mesmo que o cookie fique no navegador
     st.session_state.pop("usuario", None)
-    _cookies().remove(sessao.COOKIE)
-    time.sleep(1)
-    st.rerun()
+    _gravar_cookie("", 0)
+    st.success("Sessão encerrada.")
+    st.page_link("app.py", label="Entrar novamente")
+    st.stop()
 
 
 def mostrar_segredo(chave: str, titulo: str, aviso: str):
