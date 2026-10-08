@@ -75,10 +75,10 @@ try:
             gerais = textos.carregar_gerais(db())
             novos = {
                 "saudacao": st.text_input("Saudação", gerais["saudacao"]),
-                "abertura": st.text_area("Frase de abertura", gerais["abertura"], height=90),
-                "fechamento": st.text_area("Fechamento padrão", gerais["fechamento"], height=140),
-                "fechamento_imagens": st.text_area("Fechamento (desvios com imagens/anexos)",
-                                                   gerais["fechamento_imagens"], height=140),
+                "abertura_multi": st.text_area("Frase de abertura", gerais["abertura_multi"], height=90),
+                "fechamento_multi": st.text_area("Fechamento padrão", gerais["fechamento_multi"], height=110),
+                "fechamento_multi_imagens": st.text_area("Fechamento (quando há desvio com imagens/anexos)",
+                                                         gerais["fechamento_multi_imagens"], height=110),
             }
             if st.button("Salvar textos gerais", key="salvar_gerais"):
                 textos.salvar_gerais(db(), novos)
@@ -88,10 +88,19 @@ try:
             with st.expander(d["nome"] + ("" if d["ativo"] else " (inativo)")):
                 texto = st.text_area("Texto padrão (usado quando só este desvio é registrado)", d["texto_padrao"],
                                      key=f"t{d['id']}", height=200)
-                st.caption("Para a mensagem com mais de um desvio:")
+                st.caption("Para a mensagem com mais de um desvio (versão curta):")
                 resumo = st.text_input("Resumo (entra na frase de abertura)", d["resumo"] or "", key=f"r{d['id']}")
-                titulo = st.text_input("Título da orientação", d["titulo"] or "", key=f"ti{d['id']}")
-                corpo = st.text_area("Corpo da orientação", d["corpo"] or "", key=f"c{d['id']}", height=140)
+                curta = st.text_area("Orientação curta (vira um item da lista)", d["orientacao_curta"] or "",
+                                     key=f"oc{d['id']}", height=90)
+                grupo = st.text_input("Grupo (desvios com o mesmo grupo viram um item só; deixe vazio se não houver)",
+                                      d["grupo_curto"] or "", key=f"g{d['id']}")
+                trecho = st.text_input("Trecho do grupo (usado quando há 2 ou mais do mesmo grupo; minúsculo, "
+                                       "sem ponto final)", d["trecho_grupo"] or "", key=f"tg{d['id']}")
+                complemento = st.text_area("Complemento (frase extra, aparece uma vez por item; opcional)",
+                                           d["complemento_curto"] or "", key=f"cm{d['id']}", height=70)
+                titulo = st.text_input("Título (só de reserva, se não houver orientação curta)", d["titulo"] or "",
+                                       key=f"ti{d['id']}")
+                corpo = st.text_area("Corpo (reserva)", d["corpo"] or "", key=f"c{d['id']}", height=100)
                 tipos = ["padrao", "imagens", "nenhum"]
                 atual = d["fechamento_tipo"] or "nenhum"
                 tipo = st.selectbox("Fechamento", tipos, index=tipos.index(atual), key=f"f{d['id']}")
@@ -101,7 +110,8 @@ try:
                 ativo = st.checkbox("Ativo", bool(d["ativo"]), key=f"a{d['id']}")
                 if st.button("Salvar", key=f"s{d['id']}"):
                     desvios.atualizar(db(), d["id"], texto, ativo, resumo or None, titulo, corpo,
-                                      None if tipo == "nenhum" else tipo, orient.strip())
+                                      None if tipo == "nenhum" else tipo, orient.strip(), curta.strip(),
+                                      grupo.strip() or None, complemento.strip() or None, trecho.strip() or None)
                     st.cache_data.clear()
                     st.success("Desvio atualizado.")
         with st.form("novo_desvio", clear_on_submit=True):

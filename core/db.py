@@ -164,6 +164,10 @@ COLUNAS_NOVAS = [
     ("ori_desvios", "corpo", "TEXT"),
     ("ori_desvios", "fechamento_tipo", "TEXT"),
     ("ori_desvios", "orientacao_forms", "TEXT"),
+    ("ori_desvios", "orientacao_curta", "TEXT"),
+    ("ori_desvios", "grupo_curto", "TEXT"),
+    ("ori_desvios", "complemento_curto", "TEXT"),
+    ("ori_desvios", "trecho_grupo", "TEXT"),
 ]
 
 _instancia = None

@@ -5,16 +5,60 @@ from datetime import date
 
 from core.regras import formatar_documento, rotulo_orientacao
 
-_FECHAMENTO = ("Recomendamos fortemente a utilização do aplicativo para execução dos procedimentos{extra}. "
-               "Com ele, você elimina a necessidade de envio de malotes físicos, assegurando maior agilidade na "
-               "auditoria e no pagamento da sua produção. Além disso, o uso do aplicativo gera economia com "
-               "impressão e postagem, tornando o processo mais rápido, seguro e eficiente.")
+_FECHAMENTO_MULTI = ("Recomendamos fortemente o uso do aplicativo para execução dos procedimentos{extra}: ele "
+                     "elimina o envio de malotes físicos e agiliza a auditoria e o pagamento da sua produção.")
 
+# Textos da mensagem com mais de um desvio (versao curta). Com um desvio so, vale o texto padrao dele, inteiro.
 GERAIS_PADRAO = {
     "saudacao": "Caro(a) prestador(a),",
-    "abertura": "Identificamos pendências referentes a {desvios}. Seguem as orientações:",
-    "fechamento": _FECHAMENTO.format(extra=""),
-    "fechamento_imagens": _FECHAMENTO.format(extra=" e anexo de imagens"),
+    "abertura_multi": "Identificamos pendências referentes a {desvios}. Orientamos:",
+    "fechamento_multi": _FECHAMENTO_MULTI.format(extra=""),
+    "fechamento_multi_imagens": _FECHAMENTO_MULTI.format(extra=" e anexo de imagens"),
+}
+
+_COMPLEMENTO_DATA = ("Executar o procedimento no sistema antes de imprimir a guia, para que o campo 39 seja "
+                     "preenchido automaticamente.")
+_GRUPO_GUIA = "Preenchimento da guia física"
+_GRUPO_MALOTE = "Prazo do malote"
+
+_GRUPO_EXECUCAO = "Execução no sistema"
+_COMPLEMENTO_EXECUCAO = "Isso garante a cobrança correta e evita glosas."
+_COMPLEMENTO_MALOTE = "O aplicativo ajuda nesse ponto por dispensar o envio físico."
+
+# Orientacao curta de cada desvio para a mensagem com varios: (frase, grupo, complemento, trecho).
+# - frase: o item da lista quando o desvio aparece sozinho no seu grupo;
+# - grupo: desvios do mesmo grupo viram UM item; com 2 ou mais, usam-se os `trecho`s, emendados numa frase so
+#   (trechos que terminam igual sao fundidos: "nao rasurar" + "preencher a data" -> "nao rasurar e preencher a data");
+# - complemento: frase extra que aparece uma vez por item.
+CURTAS_PADRAO = {
+    "FALTA ASSINATURA DO USUARIO/RESPONSAVEL": (
+        "Colher as assinaturas obrigatórias do beneficiário ou responsável na guia física (campos 40 e 50).",
+        _GRUPO_GUIA, None, "colher as assinaturas obrigatórias do beneficiário ou responsável (campos 40 e 50)"),
+    "FALTA CARIMBO/ASSINATURA DO CREDENCIADO": (
+        "Carimbar e assinar a guia física (campo 49).", _GRUPO_GUIA, None, "carimbar e assinar (campo 49)"),
+    "RASURA NA DATA DE ATENDIMENTO": (
+        "Não rasurar a data de atendimento.", _GRUPO_GUIA, _COMPLEMENTO_DATA, "não rasurar a data de atendimento"),
+    "FALTA DATA DO ATENDIMENTO": (
+        "Preencher a data de atendimento.", _GRUPO_GUIA, _COMPLEMENTO_DATA, "preencher a data de atendimento"),
+    "FALTA DOCUMENTACAO": (
+        "Enviar fisicamente as guias executadas pelo Portal do Dentista, preenchidas, assinadas e sem rasuras. "
+        "A falta da guia física ou o preenchimento incorreto pode gerar glosas e atrasos no pagamento.",
+        None, None, None),
+    "ENVIO DE RAIO X FISICO": (
+        "Fazer o upload da imagem radiográfica no sistema, evitando perdas, extravios e danos no transporte das "
+        "radiografias físicas.", None, None, None),
+    "DATA DE ATENDIMENTO POSTERIOR AO PERIODO ANALISADO": (
+        "Registrar o procedimento no sistema no mesmo dia em que for realizado.", _GRUPO_EXECUCAO,
+        _COMPLEMENTO_EXECUCAO, "registrar cada procedimento no sistema no mesmo dia em que for realizado"),
+    "MALOTE POSTADO FORA DO PRAZO CONTRATUAL": (
+        "Postar a produção física até o dia 05 de cada mês, conforme a Cláusula 10, item 10.1 do contrato.",
+        _GRUPO_MALOTE, None, "postar a produção física até o dia 05 de cada mês (Cláusula 10, item 10.1 do contrato)"),
+    "MALOTE ENTREGUE APOS DIA 20": (
+        "Atentar-se aos prazos de envio do malote, que depende do correio.", _GRUPO_MALOTE, _COMPLEMENTO_MALOTE,
+        "atentar-se aos prazos de envio do malote, que depende do correio"),
+    "FALTA EXECUCAO DO PROCEDIMENTO": (
+        "Executar corretamente os procedimentos no sistema.", _GRUPO_EXECUCAO, _COMPLEMENTO_EXECUCAO,
+        "executar corretamente os procedimentos"),
 }
 
 # Frase usada na abertura da mensagem com mais de um desvio (editavel na tela de Administracao).
@@ -156,9 +200,19 @@ def preencher_estrutura(db) -> None:
         if frase:
             comandos.append(("UPDATE ori_desvios SET orientacao_forms=? WHERE id=? AND orientacao_forms IS NULL",
                              (frase, d["id"])))
-    if db.query("SELECT COUNT(*) AS n FROM ori_textos")[0]["n"] < len(GERAIS_PADRAO):
-        comandos += [("INSERT OR IGNORE INTO ori_textos (chave, valor) VALUES (?,?)", (k, v))
-                     for k, v in GERAIS_PADRAO.items()]
+    for d in db.query("SELECT id, nome FROM ori_desvios WHERE orientacao_curta IS NULL"):
+        curta = CURTAS_PADRAO.get(_sem_acento(d["nome"]))
+        if curta:  # desvio novo, sem frase padrao: fica NULL e a mensagem usa o titulo do texto
+            comandos.append(("UPDATE ori_desvios SET orientacao_curta=?, grupo_curto=?, complemento_curto=?, "
+                             "trecho_grupo=? WHERE id=? AND orientacao_curta IS NULL", (*curta, d["id"])))
+    for d in db.query("SELECT id, nome FROM ori_desvios WHERE trecho_grupo IS NULL AND orientacao_curta IS NOT NULL"):
+        trecho = (CURTAS_PADRAO.get(_sem_acento(d["nome"])) or (None,) * 4)[3]
+        if trecho:  # coluna criada depois da frase curta: completa so quem ainda nao tem trecho
+            comandos.append(("UPDATE ori_desvios SET trecho_grupo=? WHERE id=? AND trecho_grupo IS NULL",
+                             (trecho, d["id"])))
+    existentes = {r["chave"] for r in db.query("SELECT chave FROM ori_textos")}
+    comandos += [("INSERT OR IGNORE INTO ori_textos (chave, valor) VALUES (?,?)", (k, v))
+                 for k, v in GERAIS_PADRAO.items() if k not in existentes]
     if comandos:
         db.batch(comandos)
 
@@ -174,28 +228,71 @@ def salvar_gerais(db, valores: dict) -> None:
                "valor=excluded.valor", (k, v)) for k, v in valores.items() if k in GERAIS_PADRAO])
 
 
+def _fundir_trechos(trechos: list[str]) -> list[str]:
+    """Junta trechos vizinhos que terminam igual (3 palavras ou mais): 'nao rasurar a data de atendimento' +
+    'preencher a data de atendimento' -> 'nao rasurar e preencher a data de atendimento'."""
+    saida: list[str] = []
+    for trecho in trechos:
+        if saida:
+            anterior, atual = saida[-1].split(), trecho.split()
+            n = 0
+            while n < min(len(anterior), len(atual)) and anterior[-1 - n] == atual[-1 - n]:
+                n += 1
+            if n >= 3 and len(anterior) > n and len(atual) > n:
+                saida[-1] = " ".join(anterior[:-n]) + " e " + trecho
+                continue
+        saida.append(trecho)
+    return saida
+
+
+def _emendar(trechos: list[str]) -> str:
+    """'a', 'a e b' ou 'a, b e c', ja com os trechos de final igual fundidos."""
+    return _lista(_fundir_trechos(trechos))
+
+
+def _itens_da_lista(desvios: list[dict]) -> list[str]:
+    """Uma orientacao por item. Desvios do mesmo grupo viram um item so: com um unico membro vale a frase dele;
+    com 2 ou mais, os trechos sao emendados numa frase so, sob o rotulo do grupo. Frases e complementos repetidos
+    aparecem uma vez. Sem frase curta cadastrada, usa o titulo do texto padrao (ou o nome)."""
+    itens, por_grupo = [], {}
+    for d in desvios:
+        frase = ((d.get("orientacao_curta") or "").strip() or (d.get("titulo") or "").strip() or d["nome"])
+        grupo = (d.get("grupo_curto") or "").strip() or None
+        membro = {"frase": frase, "trecho": (d.get("trecho_grupo") or "").strip() or None,
+                  "complemento": (d.get("complemento_curto") or "").strip() or None}
+        if grupo and grupo in por_grupo:
+            itens[por_grupo[grupo]]["membros"].append(membro)
+        else:
+            itens.append({"grupo": grupo, "membros": [membro]})
+            if grupo:
+                por_grupo[grupo] = len(itens) - 1
+    textos_dos_itens = []
+    for item in itens:
+        membros, complementos = item["membros"], []
+        for m in membros:
+            if m["complemento"] and m["complemento"] not in complementos:
+                complementos.append(m["complemento"])
+        if item["grupo"] and len(membros) > 1:
+            trechos = list(dict.fromkeys(m["trecho"] for m in membros if m["trecho"]))
+            soltas = list(dict.fromkeys(m["frase"] for m in membros if not m["trecho"]))  # sem trecho: frase inteira
+            partes = [f"{item['grupo']}: {_emendar(trechos)}."] if trechos else []
+            texto = " ".join(partes + soltas + complementos)
+        else:
+            texto = " ".join(list(dict.fromkeys(m["frase"] for m in membros)) + complementos)
+        textos_dos_itens.append(texto)
+    return textos_dos_itens
+
+
 def montar_mensagem(desvios: list[dict], gerais: dict) -> str:
-    """Mensagem ao prestador. Um desvio: o texto padrao, sem mudanca. Varios: saudacao unica, abertura com
-    os problemas, cada orientacao uma so vez (as identicas se fundem) e um unico fechamento."""
+    """Mensagem ao prestador. Um desvio: o texto padrao, inteiro e sem mudanca. Varios: versao curta, com
+    saudacao unica, abertura com os problemas, uma orientacao curta por item (desvios do mesmo grupo juntos)
+    e um unico fechamento."""
     if len(desvios) == 1:
         return desvios[0]["texto_padrao"].strip()
-    topicos, vistos = [], set()
-    for d in desvios:
-        titulo, corpo = (d.get("titulo") or "").strip(), (d.get("corpo") or "").strip()
-        if not titulo and not corpo:
-            titulo = d["nome"]
-        chave = (titulo.lower(), corpo.lower())
-        if chave not in vistos:
-            vistos.add(chave)
-            topicos.append((titulo, corpo))
     resumos = list(dict.fromkeys(d.get("resumo") or d["nome"].lower() for d in desvios))
-    blocos = [gerais["saudacao"], gerais["abertura"].replace("{desvios}", _lista(resumos))]
-    for n, (titulo, corpo) in enumerate(topicos, start=1):
-        cabecalho = f"{n}. {titulo}" if len(topicos) > 1 else titulo
-        blocos.append(cabecalho + (f"\n{corpo}" if corpo else ""))
-    tipos = {d.get("fechamento_tipo") for d in desvios}
-    if "imagens" in tipos:
-        blocos.append(gerais["fechamento_imagens"])
-    elif "padrao" in tipos:
-        blocos.append(gerais["fechamento"])
-    return "\n\n".join(blocos)
+    itens = _itens_da_lista(desvios)
+    lista = itens[0] if len(itens) == 1 else "\n".join(f"{n}. {t}" for n, t in enumerate(itens, start=1))
+    abertura = gerais["abertura_multi"].replace("{desvios}", _lista(resumos))
+    imagens = any(d.get("fechamento_tipo") == "imagens" for d in desvios)
+    fechamento = gerais["fechamento_multi_imagens" if imagens else "fechamento_multi"]
+    return f"{gerais['saudacao']}\n\n{abertura}\n{lista}\n\n{fechamento}"

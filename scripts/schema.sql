@@ -18,7 +18,11 @@ CREATE TABLE IF NOT EXISTS ori_desvios (
   titulo TEXT,
   corpo TEXT,
   fechamento_tipo TEXT,
-  orientacao_forms TEXT
+  orientacao_forms TEXT,
+  orientacao_curta TEXT,
+  grupo_curto TEXT,
+  complemento_curto TEXT,
+  trecho_grupo TEXT
 );
 CREATE TABLE IF NOT EXISTS ori_textos (
   chave TEXT PRIMARY KEY,

@@ -55,36 +55,80 @@ def test_um_desvio_mantem_o_texto_original():
     assert textos.montar_mensagem([MAL], textos.GERAIS_PADRAO) == MALOTE.strip()
 
 
-def test_desvios_com_o_mesmo_texto_aparecem_uma_vez():
-    m = textos.montar_mensagem([G1, G3], textos.GERAIS_PADRAO)
-    assert m.count("Atenção ao correto preenchimento da guia física") == 1
-    assert "desvio guia 1 e desvio guia 2" in m
-    assert "1. " not in m  # uma unica orientacao: sem numeracao
+def curto(nome, frase, grupo=None, complemento=None, tipo="padrao", trecho=None):
+    return {"nome": nome, "texto_padrao": "x", "resumo": nome.lower(), "orientacao_curta": frase,
+            "grupo_curto": grupo, "complemento_curto": complemento, "fechamento_tipo": tipo, "trecho_grupo": trecho}
 
 
-def test_mensagem_com_orientacoes_diferentes_e_fechamento_unico():
-    m = textos.montar_mensagem([G1, MAL, G3], textos.GERAIS_PADRAO)
-    assert m.startswith("Caro(a) prestador(a),\n\nIdentificamos pendências referentes a desvio guia 1, malote e "
-                        "desvio guia 2. Seguem as orientações:")
-    assert "1. Atenção ao correto" in m and "2. Evite atrasos no pagamento" in m and "3. " not in m
-    assert m.count("Recomendamos fortemente") == 1 and m.endswith("seguro e eficiente.")
-    assert m.count("Caro(a)") == 1
+A = curto("DESVIO A", "Fazer A.")
+B = curto("DESVIO B", "Fazer B.")
+GA = curto("GRUPO 1", "Fazer G1.", grupo="Tema", complemento="Antes, preparar.", trecho="fazer g1")
+GB = curto("GRUPO 2", "Fazer G2.", grupo="Tema", complemento="Antes, preparar.", trecho="fazer g2")
+
+
+def test_versao_curta_numera_os_itens_e_traz_um_fechamento_so():
+    m = textos.montar_mensagem([A, B], textos.GERAIS_PADRAO)
+    assert m == ("Caro(a) prestador(a),\n\nIdentificamos pendências referentes a desvio a e desvio b. Orientamos:\n"
+                 "1. Fazer A.\n2. Fazer B.\n\n" + textos.GERAIS_PADRAO["fechamento_multi"])
+    assert m.count("Recomendamos") == 1 and m.count("Caro(a)") == 1
+
+
+def test_desvios_do_mesmo_grupo_viram_um_item_com_os_trechos_emendados_e_o_complemento_uma_vez():
+    m = textos.montar_mensagem([GA, A, GB], textos.GERAIS_PADRAO)
+    assert "1. Tema: fazer g1 e fazer g2. Antes, preparar.\n2. Fazer A." in m
+    assert m.count("Antes, preparar.") == 1 and "Fazer G1." not in m  # no grupo, a frase inteira nao repete
+
+
+def test_um_so_item_nao_leva_numero_e_um_so_membro_do_grupo_nao_leva_rotulo():
+    m = textos.montar_mensagem([GA, GB], textos.GERAIS_PADRAO)
+    assert "Orientamos:\nTema: fazer g1 e fazer g2. Antes, preparar.\n\n" in m
+    assert not any(l.startswith(("1. ", "2. ")) for l in m.splitlines())  # um item so: sem numeracao
+    m = textos.montar_mensagem([GA, A], textos.GERAIS_PADRAO)
+    assert "1. Fazer G1. Antes, preparar.\n2. Fazer A." in m  # so um do grupo: frase inteira, sem 'Tema:'
+
+
+def test_tres_do_mesmo_grupo_usam_virgula_e_e():
+    g3 = curto("GRUPO 3", "Fazer G3.", grupo="Tema", trecho="fazer g3")
+    m = textos.montar_mensagem([GA, GB, g3], textos.GERAIS_PADRAO)
+    assert "Tema: fazer g1, fazer g2 e fazer g3. Antes, preparar." in m
+
+
+def test_trechos_que_terminam_igual_sao_fundidos():
+    fundir = textos._fundir_trechos
+    assert fundir(["não rasurar a data de atendimento", "preencher a data de atendimento"]) == [
+        "não rasurar e preencher a data de atendimento"]
+    assert fundir(["colher x (campos 40 e 50)", "carimbar e assinar (campo 49)"]) == [
+        "colher x (campos 40 e 50)", "carimbar e assinar (campo 49)"]  # finais diferentes: nada muda
+    assert fundir(["a b", "c b"]) == ["a b", "c b"]  # final igual curto demais (menos de 3 palavras)
+    assert fundir(["ligar", "não rasurar a data de atendimento", "preencher a data de atendimento"]) == [
+        "ligar", "não rasurar e preencher a data de atendimento"]
+
+
+def test_membro_do_grupo_sem_trecho_entra_com_a_frase_inteira():
+    sem_trecho = curto("GRUPO 3", "Fazer G3.", grupo="Tema")
+    m = textos.montar_mensagem([GA, sem_trecho], textos.GERAIS_PADRAO)
+    assert "Tema: fazer g1. Fazer G3. Antes, preparar." in m
+    so_frases = textos.montar_mensagem([sem_trecho, curto("GRUPO 4", "Fazer G4.", grupo="Tema")], textos.GERAIS_PADRAO)
+    assert "Fazer G3. Fazer G4." in so_frases and "Tema:" not in so_frases  # sem trechos: sem rotulo
 
 
 def test_fechamento_com_imagens_quando_algum_desvio_pede():
-    m = textos.montar_mensagem([RX, MAL], textos.GERAIS_PADRAO)
-    assert "execução dos procedimentos e anexo de imagens." in m
+    m = textos.montar_mensagem([curto("RAIO X", "Subir a imagem.", tipo="imagens"), A], textos.GERAIS_PADRAO)
+    assert "execução dos procedimentos e anexo de imagens:" in m
+    assert "anexo de imagens" not in textos.montar_mensagem([A, B], textos.GERAIS_PADRAO)
 
 
-def test_fechamento_usa_o_texto_editado_na_administracao():
-    gerais = {**textos.GERAIS_PADRAO, "fechamento": "FECHO NOVO", "abertura": "Pontos: {desvios}."}
-    m = textos.montar_mensagem([MAL, APP], gerais)
-    assert "Pontos: malote e so app." in m and m.endswith("FECHO NOVO")
+def test_textos_editados_na_administracao_valem():
+    gerais = {**textos.GERAIS_PADRAO, "fechamento_multi": "FECHO NOVO", "abertura_multi": "Pontos: {desvios}."}
+    m = textos.montar_mensagem([A, B], gerais)
+    assert "Pontos: desvio a e desvio b." in m and m.endswith("FECHO NOVO")
 
 
-def test_desvio_sem_estrutura_usa_o_nome():
-    solto = {"nome": "NOVO DESVIO", "texto_padrao": "x", "titulo": None, "corpo": None}
-    assert "1. NOVO DESVIO" in textos.montar_mensagem([solto, MAL], textos.GERAIS_PADRAO)
+def test_desvio_sem_orientacao_curta_usa_o_titulo_e_depois_o_nome():
+    com_titulo = {"nome": "N1", "texto_padrao": "x", "titulo": "Titulo do texto", "orientacao_curta": None}
+    sem_nada = {"nome": "N2", "texto_padrao": "x"}
+    m = textos.montar_mensagem([com_titulo, sem_nada], textos.GERAIS_PADRAO)
+    assert "1. Titulo do texto\n2. N2" in m
 
 
 @pytest.fixture
@@ -101,7 +145,9 @@ def test_preencher_estrutura_e_idempotente_e_respeita_edicao(banco):
     d = desvios.listar(banco)[0]
     assert d["resumo"] == "malote postado fora do prazo contratual"
     assert d["titulo"] == "Evite atrasos no pagamento da sua produção" and d["fechamento_tipo"] == "padrao"
-    assert len(banco.query("SELECT * FROM ori_textos")) == 4
+    assert {r["chave"] for r in banco.query("SELECT chave FROM ori_textos")} >= set(textos.GERAIS_PADRAO)
+    assert (d["orientacao_curta"], d["grupo_curto"]) == (
+        textos.CURTAS_PADRAO["MALOTE POSTADO FORA DO PRAZO CONTRATUAL"][0], "Prazo do malote")
     desvios.atualizar(banco, d["id"], MALOTE, True, "resumo editado", "Titulo novo", "corpo novo", "imagens")
     textos.preencher_estrutura(banco)  # nao sobrescreve o que foi editado
     d = desvios.listar(banco)[0]
@@ -118,17 +164,29 @@ def test_orientacao_do_forms_vem_preenchida_e_nao_sobrescreve_edicao(banco):
     assert desvios.listar(banco)[0]["orientacao_forms"] == ""
 
 
+def test_orientacao_curta_editada_ou_apagada_de_proposito_nao_volta_ao_padrao(banco):
+    textos.preencher_estrutura(banco)
+    d = desvios.listar(banco)[0]
+    desvios.atualizar(banco, d["id"], MALOTE, True, d["resumo"], d["titulo"], d["corpo"], d["fechamento_tipo"],
+                      d["orientacao_forms"], "Frase minha.", None, None)
+    textos.preencher_estrutura(banco)
+    d = desvios.listar(banco)[0]
+    assert (d["orientacao_curta"], d["grupo_curto"]) == ("Frase minha.", None)
+
+
 def test_todos_os_desvios_da_planilha_tem_orientacao_padrao():
     nomes = set(textos.RESUMOS_PADRAO)
-    assert nomes == set(textos.ORIENTACOES_FORMS_PADRAO)
+    assert nomes == set(textos.ORIENTACOES_FORMS_PADRAO) == set(textos.CURTAS_PADRAO)
     assert all(not f.endswith(".") and f[0].islower() for f in textos.ORIENTACOES_FORMS_PADRAO.values())
+    assert all(c[0].endswith(".") and c[0][0].isupper() for c in textos.CURTAS_PADRAO.values())
 
 
 def test_textos_gerais_editaveis(banco):
     textos.preencher_estrutura(banco)
     textos.salvar_gerais(banco, {"saudacao": "Olá,", "chave_invalida": "x"})
     g = textos.carregar_gerais(banco)
-    assert g["saudacao"] == "Olá," and "chave_invalida" not in g and g["fechamento"] == textos.GERAIS_PADRAO["fechamento"]
+    assert g["saudacao"] == "Olá," and "chave_invalida" not in g
+    assert g["fechamento_multi"] == textos.GERAIS_PADRAO["fechamento_multi"]
 
 
 def test_adicionar_desvio_ja_preenche_a_estrutura(banco):
