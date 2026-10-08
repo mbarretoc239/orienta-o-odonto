@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS ori_orientacoes (
   criado_por TEXT NOT NULL,
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),
   excluido_em TEXT,
-  excluido_por TEXT
+  excluido_por TEXT,
+  lote_id TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_ori_doc_desvio ON ori_orientacoes(documento, desvio_id) WHERE excluido_em IS NULL;
 CREATE TABLE IF NOT EXISTS ori_auditoria (

@@ -37,7 +37,8 @@ def editar(linha):
 @st.dialog("Excluir orientação")
 def excluir(linha):
     st.warning(f"Excluir a {linha['numero_orientacao']}ª orientação de {linha['prestador']} "
-               f"({linha['desvio']}, {linha['data_orientacao']})? As seguintes não serão renumeradas.")
+               f"({linha['desvio']}, {linha['data_orientacao']})? As orientações seguintes deste prestador "
+               "e desvio serão renumeradas.")
     if st.button("Excluir definitivamente", type="primary"):
         ok, msg = orientacoes.excluir(db(), usuario, int(linha["id"]))
         if ok:

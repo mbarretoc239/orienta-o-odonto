@@ -12,6 +12,10 @@ usuario = exigir_login()
 st.title("Registrar orientação")
 
 
+MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
+         "novembro", "dezembro"]
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def prestador_por_documento(doc):
     return prestadores.buscar(db(), doc)
@@ -26,35 +30,57 @@ def botao_forms(chave):
         st.caption("Link do FORMS não configurado (FORMS_URL nos secrets).")
 
 
-def texto_contato_direto(numero):
-    return f"Prestador já conta com {numero} orientações. Direcionar para contato direto por parte do credenciamento."
+def avisos_de_acao(itens, chave):
+    """Cada desvio tem a propria acao: contato direto para uns, um unico FORMS para os que o exigem."""
+    contato = [i for i in itens if i["acao"] == "CONTATO DIRETO"]
+    forms = [i for i in itens if i["acao"] == "FORMS"]
+    for i in contato:
+        prefixo = f"{i['desvio']}: " if len(itens) > 1 else ""
+        st.error(f"{prefixo}Prestador já conta com {i['numero']} orientações. "
+                 "Direcionar para contato direto por parte do credenciamento.")
+    if forms:
+        nomes = "; ".join(i["desvio"] for i in forms)
+        st.info(f"Exige o preenchimento do FORMS ({nomes})." if len(forms) == 1
+                else f"Exige um FORMS cobrindo estes desvios: {nomes}.")
+        botao_forms(chave)
 
 
 @st.dialog("Confirmar registro")
-def confirmar(prestador, desvio, previa, data, sinal, obs):
+def confirmar(prestador, escolhidos, itens, data, sinal, obs):
     st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(prestador['documento'])}")
-    st.write(f"{desvio['nome']} · {previa['rotulo']} · {data.strftime('%d/%m/%Y')}"
-             + (f" · **AÇÃO: {previa['acao']}**" if previa["acao"] else ""))
-    if previa["contato_direto"]:
-        st.error(texto_contato_direto(previa["numero"]))
+    st.write(f"Data: {data.strftime('%d/%m/%Y')}")
+    for i in itens:
+        st.write(f"• {i['desvio']} · {i['rotulo']}" + (f" · **AÇÃO: {i['acao']}**" if i["acao"] else ""))
+    for i in itens:
+        if i["acao"] == "CONTATO DIRETO":
+            st.error(f"{i['desvio']}: Prestador já conta com {i['numero']} orientações. "
+                     "Direcionar para contato direto por parte do credenciamento.")
     if st.button("Confirmar e registrar", type="primary"):
-        reg, msg = orientacoes.registrar(db(), usuario, prestador["documento"], desvio["id"], data, sinal, obs)
-        if not reg:
+        regs, msg = orientacoes.registrar_varios(
+            db(), usuario, prestador["documento"], [d["id"] for d in escolhidos], data, sinal, obs)
+        if not regs:
             st.error(msg)
             return
-        st.session_state["ultimo_registro"] = {
-            "numero": reg["numero_orientacao"], "acao": reg["acao"], "texto": desvio["texto_padrao"],
-        }
+        por_id = {d["id"]: d for d in escolhidos}
+        st.session_state["ultimo_registro"] = [
+            {"desvio": por_id[r["desvio_id"]]["nome"], "numero": r["numero_orientacao"], "acao": r["acao"],
+             "texto": por_id[r["desvio_id"]]["texto_padrao"]}
+            for r in regs
+        ]
         st.rerun()
 
 
 if st.session_state.get("ultimo_registro"):
-    r = st.session_state.pop("ultimo_registro")
-    st.success(f"{r['numero']}ª orientação registrada" + (f" · AÇÃO: {r['acao']}" if r["acao"] else "") + ".")
+    itens = st.session_state.pop("ultimo_registro")
+    st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
+    for i in itens:
+        st.write(f"• {i['desvio']} · {i['numero']}ª orientação" + (f" · AÇÃO: {i['acao']}" if i["acao"] else ""))
+    avisos_de_acao(itens, "forms_pos_registro")
     st.caption("Texto padrão para enviar ao prestador (use o ícone de copiar):")
-    st.code(r["texto"], language=None, wrap_lines=True)
-    if r["acao"] == "FORMS":
-        botao_forms("forms_pos_registro")
+    for i in itens:
+        if len(itens) > 1:
+            st.markdown(f"**{i['desvio']}**")
+        st.code(i["texto"], language=None, wrap_lines=True)
 
 try:
     doc_txt = st.text_input("CNPJ/CPF do prestador", placeholder="Somente números ou com pontuação")
@@ -75,22 +101,46 @@ try:
                 st.error(msg)
     elif prestador:
         st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(doc)}")
-        desvio = st.selectbox("Desvio", desvios_ativos(), format_func=lambda d: d["nome"],
+        desvios = desvios_ativos()
+        hoje = date.today()
+        ja_registradas = orientacoes.registradas_no_mes(db(), doc, hoje)
+        if ja_registradas:
+            with st.container(border=True):
+                st.markdown(f"**Já registrado em {MESES[hoje.month - 1]}/{hoje.year} para este prestador:**")
+                for r in ja_registradas:
+                    st.write(f"• {r['desvio']} · {r['numero']}ª orientação · "
+                             f"{date.fromisoformat(r['data_orientacao']).strftime('%d/%m/%Y')}")
+        mais_de_um = st.checkbox(
+            "Mais de um desvio neste mês",
+            help="Para lançar 2 ou mais desvios de uma vez. Cada desvio é registrado em uma linha, "
+                 "com a própria numeração e a própria ação.")
+
+        if mais_de_um:
+            escolhidos = st.multiselect("Desvios", desvios, format_func=lambda d: d["nome"],
+                                        placeholder="Escolha os desvios")
+        else:
+            um = st.selectbox("Desvio", desvios, format_func=lambda d: d["nome"],
                               index=None, placeholder="Escolha o desvio")
-        if desvio:
-            previa = orientacoes.previa(db(), doc, desvio["id"])
-            c1, c2 = st.columns(2)
-            c1.metric("Orientação", previa["rotulo"])
-            c2.metric("Ação", previa["acao"] or "—")
-            if previa["contato_direto"]:
-                st.error(texto_contato_direto(previa["numero"]))
-            elif previa["acao"] == "FORMS":
-                st.info("Esta orientação exige o preenchimento do FORMS.")
-                botao_forms("forms_previa")
-            data = st.date_input("Data da orientação", value=date.today(), format="DD/MM/YYYY")
+            escolhidos = [um] if um else []
+
+        if escolhidos:
+            itens = []
+            for d in escolhidos:
+                p = orientacoes.previa(db(), doc, d["id"])
+                itens.append({"desvio": d["nome"], "numero": p["numero"], "rotulo": p["rotulo"], "acao": p["acao"]})
+            if len(itens) == 1:
+                c1, c2 = st.columns(2)
+                c1.metric("Orientação", itens[0]["rotulo"])
+                c2.metric("Ação", itens[0]["acao"] or "—")
+            else:
+                st.dataframe(
+                    [{"Desvio": i["desvio"], "Orientação": i["rotulo"], "Ação": i["acao"] or "—"} for i in itens],
+                    hide_index=True, width="stretch")
+            avisos_de_acao(itens, "forms_previa")
+            data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True)
             obs = st.text_area("Observação (opcional)")
             if st.button("Salvar orientação", type="primary"):
-                confirmar(prestador, desvio, previa, data, None if sinal == "—" else sinal, obs)
+                confirmar(prestador, escolhidos, itens, data, None if sinal == "—" else sinal, obs)
 except Exception as e:  # noqa: BLE001
     erro_banco(e)

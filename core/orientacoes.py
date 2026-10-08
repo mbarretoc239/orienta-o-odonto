@@ -1,4 +1,5 @@
 """Orientacoes: previa, registro, edicao, exclusao e consulta."""
+import uuid
 from datetime import date
 
 from core import auditoria, prestadores
@@ -43,24 +44,29 @@ def _duplicada(db, doc, desvio_id, data_iso, usuario):
     ))
 
 
-def registrar(db, usuario, documento, desvio_id, data_orientacao, sinalizado, observacao):
-    """Numero e acao saem do proprio INSERT: dois registros simultaneos nao duplicam o numero.
-    Retorna (orientacao|None, mensagem)."""
-    doc = normalizar_documento(documento)
-    if not prestadores.buscar(db, doc):
-        return None, "Prestador nao encontrado."
-    data_iso = data_orientacao.isoformat() if isinstance(data_orientacao, date) else str(data_orientacao)
-    if _duplicada(db, doc, desvio_id, data_iso, usuario["usuario"]):
-        return None, "Esta orientacao acabou de ser registrada (clique duplo?). Confira na consulta."
+def registradas_no_mes(db, documento, referencia):
+    """Orientacoes ja SALVAS do prestador no mes da data de referencia (aviso informativo na tela de registro)."""
+    ano_mes = referencia.isoformat()[:7] if isinstance(referencia, date) else str(referencia)[:7]
+    return db.query(
+        "SELECT d.nome AS desvio, o.numero_orientacao AS numero, o.data_orientacao "
+        "FROM ori_orientacoes o JOIN ori_desvios d ON d.id=o.desvio_id "
+        "WHERE o.documento=? AND o.excluido_em IS NULL AND substr(o.data_orientacao, 1, 7)=? "
+        "ORDER BY o.data_orientacao, o.id",
+        (normalizar_documento(documento), ano_mes),
+    )
+
+
+def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao, lote_id):
+    """Numero e acao saem do proprio INSERT, entao registros simultaneos nao duplicam o numero."""
     n = "(SELECT COUNT(*) + 1 FROM ori_orientacoes WHERE documento=? AND desvio_id=? AND excluido_em IS NULL)"
-    db.batch([
+    return [
         (
             "INSERT INTO ori_orientacoes (documento, desvio_id, data_orientacao, numero_orientacao, acao, "
-            "credenciamento_sinalizado, observacao, criado_por) "
+            "credenciamento_sinalizado, observacao, criado_por, lote_id) "
             f"SELECT ?, ?, ?, {n}, CASE WHEN ({n}) >= {int(LIMITE_CONTATO_DIRETO)} THEN 'CONTATO DIRETO' "
-            f"WHEN ({n}) % {int(ACAO_A_CADA)} = 0 THEN 'FORMS' END, ?, ?, ?",
+            f"WHEN ({n}) % {int(ACAO_A_CADA)} = 0 THEN 'FORMS' END, ?, ?, ?, ?",
             (doc, desvio_id, data_iso, doc, desvio_id, doc, desvio_id, doc, desvio_id, sinalizado,
-             observacao or None, usuario["usuario"]),
+             observacao or None, usuario["usuario"], lote_id),
         ),
         (
             "INSERT INTO ori_auditoria (quem, tabela, registro, acao, depois) "
@@ -68,12 +74,37 @@ def registrar(db, usuario, documento, desvio_id, data_orientacao, sinalizado, ob
             "'desvio_id', desvio_id, 'numero', numero_orientacao) FROM ori_orientacoes WHERE id = last_insert_rowid()",
             (usuario["usuario"],),
         ),
-    ])
+    ]
+
+
+def registrar_varios(db, usuario, documento, desvio_ids, data_orientacao, sinalizado, observacao):
+    """Registra uma linha por desvio, todas juntas (ou nenhuma) e ligadas pelo mesmo lote_id.
+    Cada desvio tem a propria numeracao e a propria acao. Retorna (lista de orientacoes|None, mensagem)."""
+    doc = normalizar_documento(documento)
+    desvio_ids = list(desvio_ids)
+    if not desvio_ids:
+        return None, "Escolha ao menos um desvio."
+    if len(set(desvio_ids)) != len(desvio_ids):
+        return None, "O mesmo desvio foi escolhido mais de uma vez."
+    if not prestadores.buscar(db, doc):
+        return None, "Prestador nao encontrado."
+    data_iso = data_orientacao.isoformat() if isinstance(data_orientacao, date) else str(data_orientacao)
+    if any(_duplicada(db, doc, did, data_iso, usuario["usuario"]) for did in desvio_ids):
+        return None, "Esta orientacao acabou de ser registrada (clique duplo?). Confira na consulta."
+    lote_id = uuid.uuid4().hex
+    comandos = []
+    for did in desvio_ids:
+        comandos += _comandos_registro(usuario, doc, did, data_iso, sinalizado, observacao, lote_id)
+    db.batch(comandos)
     return db.query(
-        "SELECT * FROM ori_orientacoes WHERE documento=? AND desvio_id=? AND excluido_em IS NULL "
-        "ORDER BY id DESC LIMIT 1",
-        (doc, desvio_id),
-    )[0], ""
+        "SELECT * FROM ori_orientacoes WHERE lote_id=? ORDER BY desvio_id", (lote_id,)
+    ), ""
+
+
+def registrar(db, usuario, documento, desvio_id, data_orientacao, sinalizado, observacao):
+    """Registro de um unico desvio. Retorna (orientacao|None, mensagem)."""
+    regs, msg = registrar_varios(db, usuario, documento, [desvio_id], data_orientacao, sinalizado, observacao)
+    return (regs[0] if regs else None), msg
 
 
 def _ativa(db, orientacao_id):
@@ -107,14 +138,40 @@ def excluir(db, usuario, orientacao_id):
     antes = _ativa(db, orientacao_id)
     if not antes:
         return False, "Orientacao nao encontrada."
-    db.batch([
+    comandos = [
         (
             "UPDATE ori_orientacoes SET excluido_em=datetime('now'), excluido_por=? WHERE id=?",
             (usuario["usuario"], orientacao_id),
         ),
         auditoria.registrar(usuario["usuario"], "ori_orientacoes", orientacao_id, "DELETE", antes, None),
-    ])
+    ]
+    comandos += _renumerar_apos_exclusao(db, usuario, antes)
+    db.batch(comandos)
     return True, "Orientacao excluida."
+
+
+def _renumerar_apos_exclusao(db, usuario, excluida):
+    """As orientacoes seguintes (mesmo prestador e desvio, pela ordem de registro) descem um numero e a
+    acao delas e recalculada. Comandos para entrar no mesmo batch da exclusao."""
+    restantes = db.query(
+        "SELECT id, numero_orientacao, acao FROM ori_orientacoes "
+        "WHERE documento=? AND desvio_id=? AND excluido_em IS NULL AND id<>? ORDER BY id",
+        (excluida["documento"], excluida["desvio_id"], excluida["id"]),
+    )
+    comandos = []
+    for novo_numero, o in enumerate(restantes, start=1):
+        nova_acao = acao_para(novo_numero)
+        if o["numero_orientacao"] == novo_numero and o["acao"] == nova_acao:
+            continue
+        comandos.append((
+            "UPDATE ori_orientacoes SET numero_orientacao=?, acao=? WHERE id=?",
+            (novo_numero, nova_acao, o["id"]),
+        ))
+        comandos.append(auditoria.registrar(
+            usuario["usuario"], "ori_orientacoes", o["id"], "RENUMERAR",
+            {"numero": o["numero_orientacao"], "acao": o["acao"]}, {"numero": novo_numero, "acao": nova_acao},
+        ))
+    return comandos
 
 
 def listar(db, documento=None, desvio_id=None, data_ini=None, data_fim=None, usuario=None):
