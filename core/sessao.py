@@ -35,3 +35,9 @@ def usuario_da_sessao(db, token):
 def encerrar(db, token):
     if token:
         db.execute("DELETE FROM ori_sessoes WHERE token_hash=?", (_hash(token),))
+
+
+def encerrar_outras(db, usuario: str, token_atual):
+    """Depois de trocar a senha: derruba as outras sessoes abertas da pessoa e mantem a atual."""
+    db.execute("DELETE FROM ori_sessoes WHERE usuario=? AND token_hash<>?",
+               (usuario, _hash(token_atual) if token_atual else ""))

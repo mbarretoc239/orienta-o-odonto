@@ -9,6 +9,8 @@ import os
 import re
 import secrets
 
+from core import logs
+
 PERFIS = ("contas", "gestor", "admin")
 _USUARIO = re.compile(r"^[a-z0-9][a-z0-9._-]{2,39}$")
 _ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sem 0/O/1/I para nao confundir
@@ -69,16 +71,18 @@ def _carregar(db, usuario):
 
 
 def _falha(db, u, usuario, o_que):
-    """Conta um erro; apos MAX_TENTATIVAS bloqueia a conta. Retorna a mensagem."""
+    """Conta um erro; apos MAX_TENTATIVAS bloqueia a conta. Retorna a mensagem.
+    A mensagem de erro e igual para usuario existente e inexistente (nao revela quem tem conta)."""
     erros = (u["tentativas"] or 0) + 1
     if erros >= MAX_TENTATIVAS:
         db.execute(
             "UPDATE ori_usuarios SET tentativas=0, bloqueado_ate=datetime('now', ?) WHERE usuario=?",
             (f"+{BLOQUEIO_MIN} minutes", usuario),
         )
+        logs.registrar(db, "aviso", "conta_bloqueada", f"{MAX_TENTATIVAS} tentativas incorretas ({o_que})", usuario)
         return f"Muitas tentativas incorretas. Conta bloqueada por {BLOQUEIO_MIN} minutos."
     db.execute("UPDATE ori_usuarios SET tentativas=? WHERE usuario=?", (erros, usuario))
-    return f"{o_que} Restam {MAX_TENTATIVAS - erros} tentativa(s)."
+    return o_que
 
 
 def _msg_bloqueio(u):
@@ -213,6 +217,24 @@ def senha_temporaria(db, usuario):
         _sem_sessoes(usuario),
     ])
     return temporaria
+
+
+def novo_codigo_com_senha(db, usuario, senha):
+    """'Minha conta': a propria pessoa gera outro codigo de recuperacao confirmando a senha.
+    Retorna (ok, mensagem, codigo|None). Erros de senha contam nas mesmas tentativas do login."""
+    usuario = normalizar_usuario(usuario)
+    u = _carregar(db, usuario)
+    if not u:
+        return False, "Usuario nao encontrado.", None
+    if u["bloqueado"]:
+        return False, _msg_bloqueio(u), None
+    if not confere_senha(senha or "", u["senha_hash"]):
+        return False, _falha(db, u, usuario, "Senha incorreta."), None
+    if u["tentativas"]:
+        db.execute("UPDATE ori_usuarios SET tentativas=0 WHERE usuario=?", (usuario,))
+    codigo = gerar_codigo()
+    db.execute("UPDATE ori_usuarios SET codigo_hash=? WHERE usuario=?", (_hash_codigo(codigo), usuario))
+    return True, "Novo codigo gerado. O anterior deixou de valer.", codigo
 
 
 def novo_codigo(db, usuario):

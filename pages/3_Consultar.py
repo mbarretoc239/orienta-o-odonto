@@ -5,17 +5,13 @@ import pandas as pd
 import streamlit as st
 
 from core import orientacoes
-from core.ui import db, desvios_ativos, erro_banco, exigir_login
+from core.exportacao import blindar_formulas
+from core.ui import consulta_orientacoes, db, desvios_ativos, erro_banco, exigir_login
 
 st.set_page_config(page_title="Consultar orientações", layout="wide")
 usuario = exigir_login()
 pode_editar = usuario["perfil"] in orientacoes.PODE_EDITAR
 st.title("Consultar orientações")
-
-
-@st.cache_data(ttl=60, show_spinner="Buscando...")
-def buscar(doc, desvio_id, ini, fim):
-    return orientacoes.listar(db(), doc, desvio_id, ini, fim)
 
 
 @st.dialog("Editar orientação")
@@ -29,7 +25,7 @@ def editar(linha):
     if st.button("Salvar alterações", type="primary"):
         ok, msg = orientacoes.editar(db(), usuario, int(linha["id"]), data, None if sinal == "—" else sinal, obs)
         if ok:
-            buscar.clear()
+            consulta_orientacoes.clear()
             st.rerun()
         st.error(msg)
 
@@ -39,22 +35,25 @@ def excluir(linha):
     st.warning(f"Excluir a {linha['numero_orientacao']}ª orientação de {linha['prestador']} "
                f"({linha['desvio']}, {linha['data_orientacao']})? As orientações seguintes deste prestador "
                "e desvio serão renumeradas.")
-    if st.button("Excluir definitivamente", type="primary"):
+    if st.button("Excluir", type="primary"):
         ok, msg = orientacoes.excluir(db(), usuario, int(linha["id"]))
         if ok:
-            buscar.clear()
+            consulta_orientacoes.clear()
             st.rerun()
         st.error(msg)
 
 
 try:
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     doc = c1.text_input("CNPJ/CPF")
     desvio = c2.selectbox("Desvio", desvios_ativos(), format_func=lambda d: d["nome"], index=None, placeholder="Todos")
     ini = c3.date_input("De", value=None, format="DD/MM/YYYY")
     fim = c4.date_input("Até", value=None, format="DD/MM/YYYY")
+    registrada_por = None
+    if usuario["perfil"] in orientacoes.PODE_EDITAR:  # gestor e admin acompanham quem adicionou cada orientacao
+        registrada_por = c5.selectbox("Registrada por", orientacoes.autores(db()), index=None, placeholder="Todos")
 
-    dados = buscar(doc or None, desvio["id"] if desvio else None, ini, fim)
+    dados = consulta_orientacoes(doc or None, desvio["id"] if desvio else None, ini, fim, registrada_por)
     df = pd.DataFrame(dados)
     st.caption(f"{len(df)} orientações" + (f" (mostrando as {orientacoes.LIMITE_CONSULTA} mais recentes)"
                                            if len(df) >= orientacoes.LIMITE_CONSULTA else ""))
@@ -66,7 +65,7 @@ try:
                           on_select="rerun" if pode_editar else "ignore", selection_mode="single-row")
 
     buf = BytesIO()
-    exibicao.to_excel(buf, index=False)
+    blindar_formulas(exibicao).to_excel(buf, index=False)
     st.download_button("Exportar para Excel", buf.getvalue(), "orientacoes.xlsx")
 
     if pode_editar:
@@ -78,4 +77,4 @@ try:
         if b2.button("Excluir", disabled=not sel):
             excluir(df.iloc[sel[0]].to_dict())
 except Exception as e:  # noqa: BLE001
-    erro_banco(e)
+    erro_banco(e, "Consultar")

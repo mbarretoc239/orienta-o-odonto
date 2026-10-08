@@ -2,7 +2,7 @@
 import uuid
 from datetime import date
 
-from core import auditoria, prestadores
+from core import auditoria, prestadores, tarefas
 from core.regras import (
     ACAO_A_CADA,
     LIMITE_CONTATO_DIRETO,
@@ -74,6 +74,7 @@ def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao
             "'desvio_id', desvio_id, 'numero', numero_orientacao) FROM ori_orientacoes WHERE id = last_insert_rowid()",
             (usuario["usuario"],),
         ),
+        *tarefas.comandos_criar(lote_id, desvio_id),  # depois da auditoria: ela usa last_insert_rowid()
     ]
 
 
@@ -171,7 +172,35 @@ def _renumerar_apos_exclusao(db, usuario, excluida):
             usuario["usuario"], "ori_orientacoes", o["id"], "RENUMERAR",
             {"numero": o["numero_orientacao"], "acao": o["acao"]}, {"numero": novo_numero, "acao": nova_acao},
         ))
+        comandos.extend(tarefas.comandos_sincronizar(o["id"]))  # a acao mudou: ajusta as pendencias dela
     return comandos
+
+
+def autores(db):
+    """Quem ja registrou orientacoes (para o filtro 'registrada por' do gestor)."""
+    return [r["criado_por"] for r in db.query(
+        "SELECT DISTINCT criado_por FROM ori_orientacoes WHERE excluido_em IS NULL ORDER BY criado_por")]
+
+
+def historico(db, documento):
+    """Todas as orientacoes ativas do prestador, da mais recente para a mais antiga."""
+    return db.query(
+        "SELECT d.nome AS desvio, o.numero_orientacao AS numero, o.data_orientacao AS data, o.acao, "
+        "o.criado_por AS registrado_por FROM ori_orientacoes o JOIN ori_desvios d ON d.id=o.desvio_id "
+        "WHERE o.documento=? AND o.excluido_em IS NULL ORDER BY o.data_orientacao DESC, o.id DESC",
+        (normalizar_documento(documento),),
+    )
+
+
+def situacao_por_desvio(db, documento):
+    """Por desvio: quantas orientacoes o prestador ja tem, qual sera a proxima e a acao que ela aciona."""
+    linhas = db.query(
+        "SELECT d.nome AS desvio, COUNT(*) AS ja_tem FROM ori_orientacoes o JOIN ori_desvios d ON d.id=o.desvio_id "
+        "WHERE o.documento=? AND o.excluido_em IS NULL GROUP BY d.id ORDER BY d.id",
+        (normalizar_documento(documento),),
+    )
+    return [{"desvio": x["desvio"], "ja_tem": x["ja_tem"], "proxima": rotulo_orientacao(x["ja_tem"] + 1),
+             "acao_da_proxima": acao_para(x["ja_tem"] + 1) or "—"} for x in linhas]
 
 
 def listar(db, documento=None, desvio_id=None, data_ini=None, data_fim=None, usuario=None):

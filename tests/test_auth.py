@@ -28,9 +28,10 @@ def test_fluxo_pendente_ativo(db):
 def test_bloqueio_apos_5_tentativas(db):
     auth.registrar_usuario(db, "novo.x", "Novo", SENHA)
     ativar(db, "novo.x")
-    for restantes in (4, 3, 2, 1):
+    for _ in range(4):
         _, msg = auth.autenticar(db, "novo.x", "errada")
-        assert f"Restam {restantes}" in msg
+        assert msg == "Usuario ou senha incorretos."  # igual a de um usuario que nao existe
+    assert auth.autenticar(db, "nao.existe", "errada")[1] == msg
     _, msg = auth.autenticar(db, "novo.x", "errada")
     assert "bloqueada" in msg
     u, msg = auth.autenticar(db, "novo.x", SENHA)  # senha certa, mas conta bloqueada
@@ -86,9 +87,9 @@ def test_esqueci_senha_com_codigo(db):
 
 def test_codigo_errado_conta_tentativas_e_bloqueia(db):
     novo_usuario(db)
-    for restantes in (4, 3, 2, 1):
+    for _ in range(4):
         ok, msg, _ = auth.redefinir_com_codigo(db, "novo.x", "AAAA-BBBB-CCCC", "outra-senha-9")
-        assert not ok and f"Restam {restantes}" in msg
+        assert not ok and msg == "Usuario ou codigo de recuperacao invalidos."
     assert "bloqueada" in auth.redefinir_com_codigo(db, "novo.x", "AAAA-BBBB-CCCC", "outra-senha-9")[1]
     assert "minuto" in auth.autenticar(db, "novo.x", SENHA)[1]  # o bloqueio vale tambem para o login
 

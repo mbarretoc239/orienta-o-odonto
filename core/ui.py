@@ -1,10 +1,13 @@
 """Helpers de interface: conexao, sessao persistente, guarda de login/perfil e barra lateral."""
 import json
+import logging
 
 import streamlit as st
 
-from core import auth, sessao, textos
+from core import auth, logs, sessao, tarefas, textos, usuarios
 from core.db import BancoNaoConfiguradoError, TursoIndisponivelError, criar_schema, get_db
+
+LOG = logging.getLogger("orientacoes")
 
 
 @st.cache_resource
@@ -12,6 +15,7 @@ def _banco():
     d = get_db()
     criar_schema(d)
     textos.preencher_estrutura(d)
+    logs.limpar_antigos(d)
     return d
 
 
@@ -34,11 +38,34 @@ def _cookies_do_navegador():
     return cookies
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _usuario_no_banco(login: str):
+    return auth.dados_usuario(db(), login)
+
+
+def revalidar_usuario():
+    """Mantem a sessao em dia com o banco (com no maximo 30s de atraso): quem for desativado perde o acesso e
+    mudanca de perfil vale na hora, sem esperar a pessoa sair e entrar de novo."""
+    u = st.session_state.get("usuario")
+    if not u:
+        return
+    atual = _usuario_no_banco(u["usuario"])
+    if atual is None:  # desativado, removido ou pendente
+        sessao.encerrar(db(), st.session_state.pop("token_sessao", None))
+        st.session_state.pop("usuario", None)
+        _gravar_cookie("", 0)
+        st.error("Seu acesso foi desativado. Procure o administrador.")
+        st.stop()
+    if atual["perfil"] != u["perfil"]:
+        st.session_state["usuario"] = {**u, "perfil": atual["perfil"]}
+
+
 def restaurar_sessao():
     """Se a pessoa recarregou a pagina, recupera o login a partir do cookie (valido por 8h).
     A primeira execucao depois do F5 espera o navegador informar os cookies; o componente dispara a
     reexecucao assim que responde."""
     if st.session_state.get("usuario"):
+        revalidar_usuario()
         return
     cookies = _cookies_do_navegador()
     if cookies is None:
@@ -74,8 +101,10 @@ def _gravar_cookie(token: str, max_age: int):
 
 
 def diagnostico_sessao():
-    """Abra o app com ?diag=1 para ver onde a sessao se perde depois do F5 (nao mostra o token)."""
-    if not st.query_params.get("diag"):
+    """Abra o app com ?diag=1 para ver onde a sessao se perde depois do F5 (nao mostra o token).
+    So aparece para o admin."""
+    u = st.session_state.get("usuario") or {}
+    if not st.query_params.get("diag") or u.get("perfil") != "admin":
         return
     navegador = st.session_state.get("_cookies_navegador")  # lidos pelo componente (None se ja estava logado)
     token = (navegador or {}).get(sessao.COOKIE)
@@ -151,13 +180,42 @@ def exigir_login(perfis=None):
         st.page_link("app.py", label="Trocar senha")
         st.stop()
     if perfis and u["perfil"] not in perfis:
+        logs.registrar(db(), "aviso", "acesso_negado", f"perfil {u['perfil']} tentou uma pagina restrita a {perfis}",
+                       u["usuario"])
         st.error("Você não tem permissão para acessar esta página.")
         st.stop()
     with st.sidebar:
         st.caption(f"{u['nome']} · {u['perfil']}")
+        _avisos_da_barra_lateral(u)
         if st.button("Sair"):
             encerrar_sessao()
     return u
+
+
+def link_pagina(pagina: str, rotulo: str):
+    try:
+        st.page_link(pagina, label=rotulo)
+    except Exception:  # noqa: BLE001 - fora do app multipagina (testes) o link nao existe: mostra so o texto
+        st.caption(rotulo)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _contagens(login: str, e_admin: bool):
+    return {"pendencias": tarefas.contagem(db(), login),
+            "cadastros": usuarios.contar_pendentes(db()) if e_admin else 0}
+
+
+def limpar_contagens():
+    """Chamar depois de registrar, concluir pendencia ou aprovar cadastro: o numero da barra lateral atualiza."""
+    _contagens.clear()
+
+
+def _avisos_da_barra_lateral(u: dict):
+    n = _contagens(u["usuario"], u["perfil"] == "admin")
+    link_pagina("pages/2_Pendencias.py",
+                f"Minhas pendências ({n['pendencias']})" if n["pendencias"] else "Minhas pendências")
+    if n["cadastros"]:
+        link_pagina("pages/6_Admin.py", f"⚠ {n['cadastros']} cadastro(s) aguardando aprovação")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -167,8 +225,27 @@ def desvios_ativos():
     return desvios.listar(db())
 
 
-def erro_banco(e: Exception):
+@st.cache_data(ttl=60, show_spinner="Buscando...")
+def consulta_orientacoes(documento, desvio_id, data_ini, data_fim, registrado_por=None):
+    """Cache da consulta; quem registra, edita ou exclui uma orientacao chama consulta_orientacoes.clear()."""
+    from core import orientacoes
+
+    return orientacoes.listar(db(), documento, desvio_id, data_ini, data_fim, registrado_por)
+
+
+def erro_banco(e: Exception, pagina: str | None = None):
+    """Mostra uma mensagem simples para a pessoa. O detalhe tecnico vai para o log do servidor e para a aba
+    Logs da Administracao (que sobrevive a reinicios)."""
+    usuario = (st.session_state.get("usuario") or {}).get("usuario")
+    try:
+        banco = _banco()
+    except Exception:  # noqa: BLE001 - sem banco nao ha onde gravar
+        banco = None
     if isinstance(e, TursoIndisponivelError):
+        LOG.warning("Banco indisponivel: %s", e)
         st.error("Banco indisponível no momento (limite do plano ou rede). Tente novamente em instantes.")
     else:
-        st.error(f"Erro inesperado: {e}")
+        LOG.error("Erro inesperado na pagina", exc_info=e)
+        if banco:
+            logs.registrar_excecao(banco, e, usuario, pagina)
+        st.error("Ocorreu um erro inesperado. Tente novamente e, se continuar, avise o administrador.")

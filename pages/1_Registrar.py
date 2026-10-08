@@ -1,11 +1,20 @@
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
-from core import orientacoes, prestadores, textos
+from core import orientacoes, prestadores, tarefas, textos
 from core.config import url_forms
 from core.regras import formatar_documento, normalizar_documento, rotulo_orientacao
-from core.ui import db, desvios_ativos, erro_banco, exigir_login
+from core.ui import (
+    consulta_orientacoes,
+    db,
+    desvios_ativos,
+    erro_banco,
+    exigir_login,
+    limpar_contagens,
+    link_pagina,
+)
 
 st.set_page_config(page_title="Registrar orientação", layout="centered")
 usuario = exigir_login()
@@ -19,6 +28,37 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "a
 @st.cache_data(ttl=120, show_spinner=False)
 def prestador_por_documento(doc):
     return prestadores.buscar(db(), doc)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def busca_por_nome(termo):
+    return prestadores.buscar_por_nome(db(), termo, limite=15)
+
+
+def usar_prestador_da_busca():
+    """Ao escolher um resultado da busca por nome, preenche o campo do CNPJ/CPF."""
+    escolhido = st.session_state.get("busca_sel")
+    if escolhido:
+        st.session_state["doc_txt"] = escolhido["documento"]
+
+
+def quadro_historico(doc):
+    """Orientacoes que o prestador ja tem e o que a proxima de cada desvio vai acionar."""
+    historico = orientacoes.historico(db(), doc)
+    if not historico:
+        st.caption("Este prestador ainda não tem orientações registradas.")
+        return
+    with st.expander(f"Histórico deste prestador ({len(historico)} orientação(ões))"):
+        situacao = orientacoes.situacao_por_desvio(db(), doc)
+        st.markdown("**Situação por desvio**")
+        st.dataframe(pd.DataFrame(situacao).rename(columns={
+            "desvio": "Desvio", "ja_tem": "Já tem", "proxima": "Próxima será", "acao_da_proxima": "Ação da próxima"}),
+            hide_index=True, width="stretch")
+        st.markdown("**Todas as orientações**")
+        st.dataframe(pd.DataFrame([{
+            "Data": date.fromisoformat(h["data"]).strftime("%d/%m/%Y"), "Desvio": h["desvio"],
+            "Orientação": rotulo_orientacao(h["numero"]), "Ação": h["acao"] or "—", "Registrada por": h["registrado_por"]}
+            for h in historico]), hide_index=True, width="stretch")
 
 
 def botao_forms(chave):
@@ -85,6 +125,8 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
         if not regs:
             st.error(msg)
             return
+        consulta_orientacoes.clear()  # a consulta passa a mostrar o que acabou de ser registrado
+        limpar_contagens()  # as pendencias novas entram no contador da barra lateral
         por_id = {d["id"]: d for d in escolhidos}
         st.session_state["ultimo_registro"] = {
             "itens": [
@@ -102,6 +144,14 @@ if st.session_state.get("ultimo_registro"):
     ultimo = st.session_state.pop("ultimo_registro")
     itens, mensagem = ultimo["itens"], ultimo["mensagem"]
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
+    with st.container(border=True):
+        st.markdown("**Pendências criadas para você marcar quando fizer:**")
+        st.write("• " + tarefas.TIPOS["capa"] + (" (uma por desvio)" if len(itens) > 1 else ""))
+        if any(i["acao"] == "FORMS" for i in itens):
+            st.write("• " + tarefas.TIPOS["forms"])
+        if any(i["acao"] == "CONTATO DIRETO" for i in itens):
+            st.write("• " + tarefas.TIPOS["contato_direto"])
+        link_pagina("pages/2_Pendencias.py", "Ir para as pendências")
     controle_blocos(itens, "pos")
     for i in itens:
         bloco_desvio(i, "pos")
@@ -115,7 +165,17 @@ if st.session_state.get("ultimo_registro"):
     st.code(mensagem, language=None, wrap_lines=True)
 
 try:
-    doc_txt = st.text_input("CNPJ/CPF do prestador", placeholder="Somente números ou com pontuação")
+    doc_txt = st.text_input("CNPJ/CPF do prestador", placeholder="Somente números ou com pontuação", key="doc_txt")
+    with st.expander("Não sabe o CNPJ/CPF? Busque pelo nome"):
+        termo = st.text_input("Nome do prestador (a partir de 3 letras)", key="busca_nome")
+        achados = busca_por_nome(termo) if len(termo.strip()) >= 3 else []
+        if achados:
+            st.selectbox("Resultados", achados, index=None, key="busca_sel", on_change=usar_prestador_da_busca,
+                         placeholder="Escolha para usar este prestador",
+                         format_func=lambda p: f"{p['nome']} · {formatar_documento(p['documento'])}"
+                                               + (f" · {p['cidade']}/{p['uf']}" if p.get("cidade") else ""))
+        elif len(termo.strip()) >= 3:
+            st.caption("Nenhum prestador encontrado com esse nome.")
     doc = normalizar_documento(doc_txt)
     prestador = prestador_por_documento(doc) if doc else None
 
@@ -133,6 +193,7 @@ try:
                 st.error(msg)
     elif prestador:
         st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(doc)}")
+        quadro_historico(doc)
         desvios = desvios_ativos()
         hoje = date.today()
         ja_registradas = orientacoes.registradas_no_mes(db(), doc, hoje)
@@ -170,4 +231,4 @@ try:
             if st.button("Salvar orientação", type="primary"):
                 confirmar(prestador, escolhidos, itens, data, None if sinal == "—" else sinal, obs)
 except Exception as e:  # noqa: BLE001
-    erro_banco(e)
+    erro_banco(e, "Registrar")

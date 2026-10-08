@@ -67,4 +67,23 @@ CREATE TABLE IF NOT EXISTS ori_auditoria (
   acao TEXT NOT NULL,
   antes TEXT,
   depois TEXT
+);
+CREATE TABLE IF NOT EXISTS ori_tarefas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  orientacao_id INTEGER NOT NULL REFERENCES ori_orientacoes(id),
+  tipo TEXT NOT NULL CHECK (tipo IN ('capa','forms','contato_direto')),
+  feita_em TEXT,
+  feita_por TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (orientacao_id, tipo)
+);
+CREATE INDEX IF NOT EXISTS ix_ori_tarefas_pendentes ON ori_tarefas(tipo) WHERE feita_em IS NULL;
+CREATE TABLE IF NOT EXISTS ori_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quando TEXT NOT NULL DEFAULT (datetime('now')),
+  nivel TEXT NOT NULL,
+  usuario TEXT,
+  pagina TEXT,
+  evento TEXT NOT NULL,
+  detalhe TEXT
 )
