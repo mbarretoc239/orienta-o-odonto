@@ -36,10 +36,47 @@ def restaurar_sessao():
 
 def _gravar_cookie(token: str, max_age: int):
     """Grava o cookie direto na pagina (sem componente nem espera). Chamar sem st.rerun() logo em seguida,
-    para o navegador executar o script antes de a pagina ser redesenhada."""
-    cookie = json.dumps(f"{sessao.COOKIE}={token}; path=/; max-age={int(max_age)}; SameSite=Lax")
-    st.html(f"<script>document.cookie = {cookie} + (location.protocol === 'https:' ? '; Secure' : '');</script>",
-            unsafe_allow_javascript=True)
+    para o navegador executar o script antes de a pagina ser redesenhada.
+
+    Em https (Streamlit Cloud) o app roda dentro de um iframe, onde o navegador pode tratar o cookie como de
+    terceiros: por isso SameSite=None; Secure; Partitioned, com recuo para Lax se for recusado."""
+    nome, valor, idade = json.dumps(sessao.COOKIE), json.dumps(token), int(max_age)
+    st.html(f"""<script>(function () {{
+  var nome = {nome}, valor = {valor}, base = '; path=/; max-age={idade}';
+  if (location.protocol === 'https:') {{
+    document.cookie = nome + '=' + valor + base + '; SameSite=None; Secure; Partitioned';
+    if ({idade} > 0 && document.cookie.indexOf(nome + '=') === -1) {{
+      document.cookie = nome + '=' + valor + base + '; SameSite=Lax; Secure';
+    }}
+    if ({idade} === 0) document.cookie = nome + '=' + base + '; SameSite=Lax; Secure';
+  }} else {{
+    document.cookie = nome + '=' + valor + base + '; SameSite=Lax';
+  }}
+}})();</script>""", unsafe_allow_javascript=True)
+
+
+def diagnostico_sessao():
+    """Abra o app com ?diag=1 para ver onde a sessao se perde depois do F5 (nao mostra o token)."""
+    if not st.query_params.get("diag"):
+        return
+    token = st.context.cookies.get(sessao.COOKIE)
+    with st.expander("Diagnóstico de sessão", expanded=True):
+        st.write({
+            "cookies que o servidor recebeu": sorted(st.context.cookies.keys()),
+            "cookie ori_sessao chegou ao servidor": bool(token),
+            "sessao valida no banco": bool(sessao.usuario_da_sessao(db(), token)),
+            "usuario na sessao do Streamlit": (st.session_state.get("usuario") or {}).get("usuario"),
+            "host": st.context.headers.get("Host"),
+            "origem": st.context.headers.get("Origin"),
+        })
+    st.html("""<script>(function () {
+  var d = document.createElement('pre');
+  var topo = ''; try { topo = window.top.location.host; } catch (e) { topo = '(outro site)'; }
+  d.textContent = 'No navegador -> em iframe: ' + (window.top !== window.self) + ' | https: ' +
+    (location.protocol === 'https:') + ' | cookie ori_sessao visivel: ' +
+    (document.cookie.indexOf('ori_sessao=') !== -1) + ' | pagina de cima: ' + topo;
+  document.body.appendChild(d);
+})();</script>""", unsafe_allow_javascript=True)
 
 
 def iniciar_sessao(usuario: dict):

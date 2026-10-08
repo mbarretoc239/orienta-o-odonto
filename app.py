@@ -4,6 +4,7 @@ from core import auth
 from core.ui import (
     aplicar_cookie_pendente,
     db,
+    diagnostico_sessao,
     encerrar_sessao,
     iniciar_sessao,
     mostrar_segredo,
@@ -87,6 +88,7 @@ def tela_login():
 
 
 restaurar_sessao()
+diagnostico_sessao()
 if st.session_state.get("usuario"):
     tela_logada()
     st.stop()
