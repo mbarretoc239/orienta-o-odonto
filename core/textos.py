@@ -48,13 +48,35 @@ def _lista(itens: list[str]) -> str:
 
 # ---------- relato do FORMS ----------
 
-FRASE_CIENCIA = ("As devidas orientações foram feitas na capa do processo e feito este forms para ciência do "
-                 "credenciamento.")
+# Frase curta do que o credenciamento deve orientar ao prestador em cada desvio (editavel na Administracao).
+ORIENTACOES_FORMS_PADRAO = {
+    "FALTA ASSINATURA DO USUARIO/RESPONSAVEL":
+        "colher as assinaturas obrigatórias do beneficiário ou responsável na guia física (campos 40 e 50)",
+    "FALTA CARIMBO/ASSINATURA DO CREDENCIADO": "carimbar e assinar a guia (campo 49)",
+    "RASURA NA DATA DE ATENDIMENTO": "não rasurar a data de atendimento (campo 39), executando o procedimento "
+                                     "no sistema antes de imprimir a guia",
+    "FALTA DATA DO ATENDIMENTO": "preencher a data de atendimento (campo 39), executando o procedimento "
+                                 "no sistema antes de imprimir a guia",
+    "FALTA DOCUMENTACAO": "enviar fisicamente as guias executadas pelo Portal do Dentista, preenchidas, "
+                          "assinadas e sem rasuras",
+    "ENVIO DE RAIO X FISICO": "fazer o upload da imagem radiográfica no sistema, em vez de enviar a "
+                              "radiografia física",
+    "DATA DE ATENDIMENTO POSTERIOR AO PERIODO ANALISADO":
+        "executar o procedimento no sistema no mesmo dia da realização",
+    "MALOTE POSTADO FORA DO PRAZO CONTRATUAL":
+        "postar a produção física até o dia 05 de cada mês (cláusula 10, item 10.1 do contrato)",
+    "MALOTE ENTREGUE APOS DIA 20":
+        "atentar-se aos prazos de envio do malote, que depende do correio, lembrando que o aplicativo ajuda "
+        "nesse ponto por dispensar o envio físico",
+    "FALTA EXECUCAO DO PROCEDIMENTO":
+        "executar corretamente os procedimentos no sistema, para garantir a cobrança adequada",
+}
+
 
 def relato_forms(nome: str, documento: str, itens: list[dict]) -> str:
-    """Texto-base do relato do FORMS, em texto corrido (o campo do formulario nao aceita topicos nem quebras
-    de linha): identifica o prestador e os desvios cobertos por aquele formulario.
-    `itens`: dicts com `desvio`, `numero` e `data` (ISO). Quem preenche acrescenta o que quiser depois."""
+    """Texto do relato do FORMS, em texto corrido (o campo do formulario nao aceita topicos nem quebras de
+    linha): identifica o prestador e os desvios cobertos por aquele formulario e diz o que o credenciamento
+    deve orientar. `itens`: dicts com `desvio`, `numero`, `data` (ISO) e, opcionalmente, `orientacao`."""
     tipo = "CPF" if len(documento) == 11 else "CNPJ"
     cabecalho = f"Prestador {nome} ({tipo} {formatar_documento(documento)})"
     mesma_data = len(itens) > 1 and len({i["data"] for i in itens}) == 1
@@ -65,7 +87,15 @@ def relato_forms(nome: str, documento: str, itens: list[dict]) -> str:
         partes = [f'a {rotulo_orientacao(i["numero"])} pelo desvio "{i["desvio"]}" em {_data_br(i["data"])}'
                   for i in itens]
         recebeu = f"recebeu {_lista(partes)}"
-    return f"{cabecalho} {recebeu}. {FRASE_CIENCIA}"
+    texto = f"{cabecalho} {recebeu}."
+    orientacoes = list(dict.fromkeys(  # sem repetir frases iguais, na ordem dos desvios
+        (i.get("orientacao") or "").strip().rstrip(".") for i in itens if (i.get("orientacao") or "").strip()))
+    if len(orientacoes) == 1:
+        texto += f" Orientar o prestador a {orientacoes[0]}."
+    elif orientacoes:
+        numeradas = "; ".join(f"({n}) {o}" for n, o in enumerate(orientacoes, start=1))
+        texto += f" Orientar o prestador a: {numeradas}."
+    return texto
 
 
 # ---------- mensagem ao prestador ----------
@@ -121,6 +151,11 @@ def preencher_estrutura(db) -> None:
             "UPDATE ori_desvios SET resumo=COALESCE(resumo, ?), titulo=?, corpo=?, fechamento_tipo=? WHERE id=?",
             (resumo, e["titulo"], e["corpo"], e["fechamento_tipo"], d["id"]),
         ))
+    for d in db.query("SELECT id, nome FROM ori_desvios WHERE orientacao_forms IS NULL"):
+        frase = ORIENTACOES_FORMS_PADRAO.get(_sem_acento(d["nome"]))
+        if frase:
+            comandos.append(("UPDATE ori_desvios SET orientacao_forms=? WHERE id=? AND orientacao_forms IS NULL",
+                             (frase, d["id"])))
     if db.query("SELECT COUNT(*) AS n FROM ori_textos")[0]["n"] < len(GERAIS_PADRAO):
         comandos += [("INSERT OR IGNORE INTO ori_textos (chave, valor) VALUES (?,?)", (k, v))
                      for k, v in GERAIS_PADRAO.items()]

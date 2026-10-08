@@ -89,7 +89,8 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
         st.session_state["ultimo_registro"] = {
             "itens": [
                 {"desvio": por_id[r["desvio_id"]]["nome"], "numero": r["numero_orientacao"], "acao": r["acao"],
-                 "data": r["data_orientacao"], "prestador": prestador["nome"], "documento": prestador["documento"]}
+                 "data": r["data_orientacao"], "prestador": prestador["nome"], "documento": prestador["documento"],
+                 "orientacao": por_id[r["desvio_id"]].get("orientacao_forms")}
                 for r in regs
             ],
             "mensagem": textos.montar_mensagem([por_id[r["desvio_id"]] for r in regs], textos.carregar_gerais(db())),

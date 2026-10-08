@@ -64,10 +64,13 @@ try:
                 tipos = ["padrao", "imagens", "nenhum"]
                 atual = d["fechamento_tipo"] or "nenhum"
                 tipo = st.selectbox("Fechamento", tipos, index=tipos.index(atual), key=f"f{d['id']}")
+                st.caption("Para o texto do FORMS (o que o credenciamento deve orientar ao prestador):")
+                orient = st.text_area("Orientação do FORMS (frase curta, começa com um verbo no infinitivo)",
+                                      d["orientacao_forms"] or "", key=f"o{d['id']}", height=70)
                 ativo = st.checkbox("Ativo", bool(d["ativo"]), key=f"a{d['id']}")
                 if st.button("Salvar", key=f"s{d['id']}"):
                     desvios.atualizar(db(), d["id"], texto, ativo, resumo or None, titulo, corpo,
-                                      None if tipo == "nenhum" else tipo)
+                                      None if tipo == "nenhum" else tipo, orient.strip())
                     st.cache_data.clear()
                     st.success("Desvio atualizado.")
         with st.form("novo_desvio", clear_on_submit=True):

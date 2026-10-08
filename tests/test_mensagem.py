@@ -109,6 +109,21 @@ def test_preencher_estrutura_e_idempotente_e_respeita_edicao(banco):
         "resumo editado", "Titulo novo", "corpo novo", "imagens")
 
 
+def test_orientacao_do_forms_vem_preenchida_e_nao_sobrescreve_edicao(banco):
+    textos.preencher_estrutura(banco)
+    d = desvios.listar(banco)[0]
+    assert d["orientacao_forms"] == textos.ORIENTACOES_FORMS_PADRAO["MALOTE POSTADO FORA DO PRAZO CONTRATUAL"]
+    desvios.atualizar(banco, d["id"], MALOTE, True, d["resumo"], d["titulo"], d["corpo"], d["fechamento_tipo"], "")
+    textos.preencher_estrutura(banco)  # vazio de proposito: nao volta o padrao
+    assert desvios.listar(banco)[0]["orientacao_forms"] == ""
+
+
+def test_todos_os_desvios_da_planilha_tem_orientacao_padrao():
+    nomes = set(textos.RESUMOS_PADRAO)
+    assert nomes == set(textos.ORIENTACOES_FORMS_PADRAO)
+    assert all(not f.endswith(".") and f[0].islower() for f in textos.ORIENTACOES_FORMS_PADRAO.values())
+
+
 def test_textos_gerais_editaveis(banco):
     textos.preencher_estrutura(banco)
     textos.salvar_gerais(banco, {"saudacao": "Olá,", "chave_invalida": "x"})

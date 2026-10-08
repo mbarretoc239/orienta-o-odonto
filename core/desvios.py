@@ -1,7 +1,7 @@
 """Desvios e seus textos padrao."""
 from core import textos
 
-COLUNAS = "id, nome, texto_padrao, ativo, resumo, titulo, corpo, fechamento_tipo"
+COLUNAS = "id, nome, texto_padrao, ativo, resumo, titulo, corpo, fechamento_tipo, orientacao_forms"
 TIPOS_FECHAMENTO = ("padrao", "imagens", None)
 
 
@@ -12,14 +12,16 @@ def listar(db, so_ativos=True):
     return db.query(sql + " ORDER BY id")
 
 
-def atualizar(db, desvio_id, texto_padrao, ativo, resumo=None, titulo=None, corpo=None, fechamento_tipo=None):
+def atualizar(db, desvio_id, texto_padrao, ativo, resumo=None, titulo=None, corpo=None, fechamento_tipo=None,
+              orientacao_forms=None):
     """Texto padrao: usado quando so este desvio e registrado. Resumo, titulo, corpo e fechamento: usados na
-    mensagem com mais de um desvio."""
+    mensagem com mais de um desvio. Orientacao do FORMS: frase curta do que o credenciamento deve orientar."""
     if fechamento_tipo not in TIPOS_FECHAMENTO:
         raise ValueError("Tipo de fechamento invalido.")
     db.execute(
-        "UPDATE ori_desvios SET texto_padrao=?, ativo=?, resumo=?, titulo=?, corpo=?, fechamento_tipo=? WHERE id=?",
-        (texto_padrao, int(ativo), resumo, titulo, corpo, fechamento_tipo, desvio_id),
+        "UPDATE ori_desvios SET texto_padrao=?, ativo=?, resumo=?, titulo=?, corpo=?, fechamento_tipo=?, "
+        "orientacao_forms=? WHERE id=?",
+        (texto_padrao, int(ativo), resumo, titulo, corpo, fechamento_tipo, orientacao_forms, desvio_id),
     )
 
 
