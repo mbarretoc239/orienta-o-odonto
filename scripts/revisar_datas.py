@@ -13,13 +13,13 @@ from openpyxl.utils import get_column_letter
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from migracao import datas, leitura, limpeza  # noqa: E402
+from migracao import datas, decisoes, leitura, limpeza  # noqa: E402
 
 ARQ_PLANILHA = RAIZ / "data" / "orientacao_adm_interna.xlsx"
 SAIDA = RAIZ / "data" / "revisao_datas.xlsx"
 HOJE = date.today()
-ORDEM = {datas.BAIXA: 0, datas.MEDIA: 1, datas.ALTA: 2}
-CORES = {datas.BAIXA: "F8CBAD", datas.MEDIA: "FFE699", datas.ALTA: "C6E0B4"}
+ORDEM = {datas.BAIXA: 0, datas.MEDIA: 1, datas.ALTA: 2, datas.MANUAL: 3}
+CORES = {datas.BAIXA: "F8CBAD", datas.MEDIA: "FFE699", datas.ALTA: "C6E0B4", datas.MANUAL: "BDD7EE"}
 
 
 def br(d: date | None) -> str:
@@ -42,6 +42,7 @@ def montar():
             if s.sugerida != base.sugerida and base.confianca != datas.BAIXA:
                 sugestoes[numero] = datas.Sugestao(
                     numero, base.sugerida, datas.BAIXA, "a resposta muda conforme as vizinhas consideradas: " + base.motivo)
+    datas.aplicar_decisoes(sugestoes, decisoes.DATAS_MANUAIS)  # decisoes de uma pessoa substituem a sugestao
 
     def contexto(numero, lado):
         vizinhas = [n for n in range(numero - 2, numero) if n in por_linha] if lado < 0 else \
@@ -90,9 +91,10 @@ def montar():
 def gravar(df):
     resumo = pd.DataFrame({
         "Item": ["Linhas listadas", "  que mudam de data (Muda? = SIM)", "  que ficam como estão",
-                 "Confiança ALTA", "Confiança MÉDIA", "Confiança BAIXA (decisão sua)",
+                 "Decisão manual (azul)", "Confiança ALTA", "Confiança MÉDIA", "Confiança BAIXA (decisão sua)",
                  "Datas no futuro hoje no sistema"],
         "Quantidade": [len(df), int((df["Muda?"] == "SIM").sum()), int((df["Muda?"] == "não").sum()),
+                       int((df["Confiança"] == datas.MANUAL).sum()),
                        int((df["Confiança"] == datas.ALTA).sum()), int((df["Confiança"] == datas.MEDIA).sum()),
                        int((df["Confiança"] == datas.BAIXA).sum()),
                        int(df["Data hoje no sistema"].map(

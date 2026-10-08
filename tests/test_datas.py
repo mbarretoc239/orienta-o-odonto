@@ -31,14 +31,28 @@ def test_vizinhas_decidem_quando_as_duas_leituras_sao_possiveis():
     assert s.sugerida == date(2026, 6, 3)
 
 
-def test_erro_de_ano_vai_para_revisao_sem_trocar():
-    s = datas.resolver(linhas_junho(date(2025, 5, 12)), HOJE)[5]  # nenhuma leitura combina com junho/2026
-    assert s.confianca == BAIXA and s.sugerida == date(2025, 5, 12)
+def test_erro_de_ano_e_corrigido_quando_o_mesmo_dia_e_mes_combina_com_as_vizinhas():
+    linhas = linhas_junho(date(2025, 6, 12))  # vizinhas em 14-16/06/2026: 12/06/2026 combina
+    s = datas.resolver(linhas, HOJE)[5]
+    assert s.sugerida == date(2026, 6, 12) and s.confianca == datas.MEDIA and "ano" in s.motivo
+
+
+def test_erro_de_ano_que_nao_resolve_vai_para_revisao_sem_mudar():
+    s = datas.resolver(linhas_junho(date(2025, 9, 12)), HOJE)[5]  # 12/09/2026 tambem destoa de junho
+    assert s.confianca == BAIXA and s.sugerida == date(2025, 9, 12)
 
 
 def test_data_futura_que_destoa_das_vizinhas_vai_para_revisao():
     s = datas.resolver(linhas_junho(date(2026, 11, 2)), HOJE)[5]  # troca = 11/02, mas vizinhas estao em junho
     assert s.confianca == BAIXA
+
+
+def test_decisao_manual_substitui_a_sugestao_automatica():
+    sugestoes = datas.resolver(linhas_junho(date(2026, 3, 6)), HOJE)
+    assert sugestoes[5].sugerida == date(2026, 6, 3)
+    datas.aplicar_decisoes(sugestoes, {5: (date(2026, 6, 10), "porque sim")})
+    assert sugestoes[5].sugerida == date(2026, 6, 10) and sugestoes[5].confianca == datas.MANUAL
+    assert "porque sim" in sugestoes[5].motivo
 
 
 def test_linha_sem_data_usa_as_vizinhas():

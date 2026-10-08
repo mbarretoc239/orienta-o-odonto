@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import date
 
 from core.regras import normalizar_documento, valida_documento
-from migracao import datas
+from migracao import datas, decisoes
 from migracao import limpeza as lp
 
 
@@ -56,7 +56,7 @@ def montar_orientacoes(acompanhamento, desvios, prest, conflitos):
     com_desvio = acompanhamento[~acompanhamento["desvio"].map(lp.vazio)]
     linhas_datas, corrigidas = datas.linhas_da_planilha((pos + 2, r["data"]) for pos, r in com_desvio.iterrows())
     por_linha = {x.linha: x for x in linhas_datas}
-    sugestoes = datas.resolver(linhas_datas, date.today())
+    sugestoes = datas.aplicar_decisoes(datas.resolver(linhas_datas, date.today()), decisoes.DATAS_MANUAIS)
 
     for pos, r in acompanhamento.iterrows():
         linha = pos + 2  # numero da linha no Excel

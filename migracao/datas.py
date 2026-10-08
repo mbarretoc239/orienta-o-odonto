@@ -64,6 +64,20 @@ def _custo(candidata: date, anteriores: date | None, seguintes: date | None) -> 
     return sum(partes) if partes else None
 
 
+def _corrigir_ano(d: date, referencias, hoje: date, destoa) -> date | None:
+    """Mesmo dia e mes, no ano das vizinhas, se isso combinar com elas (e nao cair no futuro)."""
+    for ref in referencias:
+        if not ref or ref.year == d.year:
+            continue
+        try:
+            candidata = d.replace(year=ref.year)
+        except ValueError:  # 29/02 em ano nao bissexto
+            continue
+        if candidata <= hoje and not destoa(candidata):
+            return candidata
+    return None
+
+
 def resolver(linhas: list[Linha], hoje: date, ancoras_n: int = ANCORAS) -> dict[int, Sugestao]:
     """Sugere a data de cada linha ambigua, na ordem da planilha. `ancoras_n`: quantas vizinhas comparar."""
     claras = [(x.linha, x.data) for x in linhas if x.data and not x.ambigua]
@@ -106,10 +120,17 @@ def resolver(linhas: list[Linha], hoje: date, ancoras_n: int = ANCORAS) -> dict[
             continue
         escolhida, margem = (a, cb - ca) if ca <= cb else (b, ca - cb)
         if destoa(escolhida):
-            saida[x.linha] = Sugestao(
-                x.linha, a, BAIXA,
-                "nenhuma das duas leituras combina com as vizinhas (possível erro de ano ou digitação): "
-                "mantida a data lida")
+            corrigida = _corrigir_ano(a, (anteriores, seguintes), hoje, destoa)
+            if corrigida:
+                saida[x.linha] = Sugestao(
+                    x.linha, corrigida, MEDIA,
+                    f"o ano parece digitado errado: mesmo dia e mês no ano das vizinhas ({a.year} -> {corrigida.year})")
+                ancoras.append(corrigida)
+            else:
+                saida[x.linha] = Sugestao(
+                    x.linha, a, BAIXA,
+                    "nenhuma das duas leituras combina com as vizinhas (possível erro de ano ou digitação): "
+                    "mantida a data lida")
             continue
         confianca = ALTA if margem >= MARGEM_ALTA else MEDIA if margem >= MARGEM_MEDIA else BAIXA
         motivo = ("a data lida combina com as vizinhas" if escolhida == a
@@ -118,6 +139,16 @@ def resolver(linhas: list[Linha], hoje: date, ancoras_n: int = ANCORAS) -> dict[
         if confianca != BAIXA:
             ancoras.append(escolhida)
     return saida
+
+
+MANUAL = "manual"
+
+
+def aplicar_decisoes(sugestoes: dict[int, Sugestao], decisoes: dict[int, tuple[date, str]]) -> dict[int, Sugestao]:
+    """Decisoes tomadas por uma pessoa substituem a sugestao automatica."""
+    for numero, (data, motivo) in decisoes.items():
+        sugestoes[numero] = Sugestao(numero, data, MANUAL, f"decisão manual: {motivo}")
+    return sugestoes
 
 
 def sugerir_sem_data(linhas: list[Linha], numero: int) -> Sugestao:
