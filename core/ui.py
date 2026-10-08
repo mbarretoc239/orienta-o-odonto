@@ -6,6 +6,7 @@ import streamlit as st
 
 from core import auth, logs, sessao, tarefas, textos, usuarios
 from core.db import BancoNaoConfiguradoError, TursoIndisponivelError, criar_schema, get_db
+from core.paginas import PAGINAS
 
 LOG = logging.getLogger("orientacoes")
 
@@ -150,7 +151,7 @@ def encerrar_sessao():
     st.session_state.pop("usuario", None)
     _gravar_cookie("", 0)
     st.success("Sessão encerrada.")
-    st.page_link("app.py", label="Entrar novamente")
+    st.page_link("inicio.py", label="Entrar novamente")
     st.stop()
 
 
@@ -174,23 +175,31 @@ def exigir_login(perfis=None):
     u = st.session_state.get("usuario")
     if not u:
         st.warning("Faça login na página inicial.")
-        st.page_link("app.py", label="Ir para o login")
+        st.page_link("inicio.py", label="Ir para o login")
         st.stop()
     if u.get("trocar_senha"):
         st.warning("Defina uma nova senha antes de continuar.")
-        st.page_link("app.py", label="Trocar senha")
+        st.page_link("inicio.py", label="Trocar senha")
         st.stop()
     if perfis and u["perfil"] not in perfis:
         logs.registrar(db(), "aviso", "acesso_negado", f"perfil {u['perfil']} tentou uma pagina restrita a {perfis}",
                        u["usuario"])
         st.error("Você não tem permissão para acessar esta página.")
         st.stop()
+    barra_lateral(u)
+    return u
+
+
+def barra_lateral(u: dict):
+    """Topo da barra lateral: quem esta logado, pendencias e Sair; abaixo, o menu das paginas."""
     with st.sidebar:
         st.caption(f"{u['nome']} · {u['perfil']}")
         _avisos_da_barra_lateral(u)
         if st.button("Sair"):
             encerrar_sessao()
-    return u
+        st.divider()
+        for arquivo, titulo, _ in PAGINAS:
+            link_pagina(arquivo, titulo)
 
 
 def link_pagina(pagina: str, rotulo: str):

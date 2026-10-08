@@ -37,6 +37,8 @@ def carregar(ini, fim):
     return {
         "resumo": painel.resumo(banco, ini, fim),
         "mes": painel.por_mes(banco, ini, fim),
+        "etapas": painel.por_mes_e_etapa(banco, ini, fim),
+        "funil": painel.funil_de_reincidencia(banco),
         "desvio": painel.por_desvio(banco, ini, fim),
         "desvio_mes": painel.desvio_por_mes(banco, ini, fim),
         "usuario": painel.por_usuario(banco, ini, fim),
@@ -73,15 +75,18 @@ try:
         st.info("Não há orientações no período escolhido.")
         st.stop()
 
-    k = st.columns(5)
+    k = st.columns(6)
     k[0].metric("Orientações", r["orientacoes"])
-    k[1].metric("Prestadores atendidos", r["prestadores"])
-    k[2].metric("FORMS gerados", int(r["forms"]))
-    k[3].metric("Contato direto", int(r["contato_direto"]))
-    k[4].metric("Pendências em aberto", r["pendencias_abertas"], help="Todas as pendências ainda não marcadas, "
+    k[1].metric("Prestadores", r["prestadores"])
+    k[2].metric("1ªs orientações", int(r["primeiras"]), help="Primeira orientação de um prestador em cada desvio.")
+    k[3].metric("FORMS gerados", int(r["forms"]))
+    k[4].metric("Contato direto", int(r["contato_direto"]))
+    k[5].metric("Pendências abertas", r["pendencias_abertas"], help="Todas as pendências ainda não marcadas, "
                                                                      "independente do período.")
 
     df_mes = pd.DataFrame(d["mes"])
+    df_etapas = pd.DataFrame(d["etapas"])
+    df_funil = pd.DataFrame(d["funil"])
     df_desvio = pd.DataFrame(d["desvio"])
     df_usuario = pd.DataFrame(d["usuario"])
     df_calor = pd.DataFrame(d["desvio_mes"])
@@ -95,6 +100,16 @@ try:
         com_tabela("Orientações por desvio", df_desvio,
                    lambda df: graficos.barras_horizontais(df, "desvio", "orientacoes", "Desvio"),
                    {"desvio": "Desvio", "orientacoes": "Orientações"})
+
+    esq, dir_ = st.columns(2)
+    with esq:
+        com_tabela("Orientações por mês, por etapa", df_etapas, graficos.etapas_por_mes,
+                   {"mes": "Mês", "etapa": "Etapa", "orientacoes": "Orientações"})
+    with dir_:
+        com_tabela("Quantos casos chegaram a cada etapa", df_funil,
+                   lambda df: graficos.barras_horizontais(df, "etapa", "casos", "Etapa", "Casos"),
+                   {"etapa": "Chegaram a", "casos": "Casos"})
+        st.caption("Caso = prestador + desvio (a contagem é por desvio). Considera todo o histórico, não só o período.")
 
     com_tabela("Desvios ao longo dos meses (quais crescem ou diminuem)", df_calor, graficos.mapa_de_calor,
                {"desvio": "Desvio", "mes": "Mês", "orientacoes": "Orientações"})
@@ -134,7 +149,7 @@ try:
 
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
-        for nome, tabela in (("Por mês", df_mes), ("Por desvio", df_desvio), ("Desvio x mês", df_calor),
+        for nome, tabela in (("Por mês", df_mes), ("Por mês e etapa", df_etapas), ("Chegaram a cada etapa", df_funil), ("Por desvio", df_desvio), ("Desvio x mês", df_calor),
                              ("Por usuário", df_usuario), ("Pendências", df_pend), ("Reincidentes", reinc)):
             if not tabela.empty:
                 blindar_formulas(tabela).to_excel(w, sheet_name=nome, index=False)

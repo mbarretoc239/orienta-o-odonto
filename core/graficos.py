@@ -67,16 +67,35 @@ def colunas_por_mes(df: pd.DataFrame):
     _exibir(_estilo(barras + rotulo, t, 260))
 
 
-def barras_horizontais(df: pd.DataFrame, categoria: str, valor: str, titulo_categoria: str):
+def etapas_por_mes(df: pd.DataFrame):
+    """Orientacoes por mes divididas por etapa: colunas empilhadas, uma cor por etapa em ordem fixa (1a orientacao,
+    FORMS, contato direto) e as demais em cinza (recuam); 2px da cor da superficie entre os segmentos."""
+    t = tema()
+    etapas = ["1ª orientação", "FORMS", "Contato direto", "Demais orientações"]
+    d = df.assign(mes_rotulo=df["mes"].map(rotulo_mes))
+    ordem = list(dict.fromkeys(d.sort_values("mes")["mes_rotulo"]))
+    barras = alt.Chart(d).mark_bar(size=26, stroke=t["superficie"], strokeWidth=2).encode(
+        x=alt.X("mes_rotulo:N", sort=ordem, title=None, axis=alt.Axis(labelAngle=0, grid=False)),
+        y=alt.Y("sum(orientacoes):Q", title=None, axis=alt.Axis(tickMinStep=1)),
+        color=alt.Color("etapa:N", scale=alt.Scale(domain=etapas, range=t["series"] + [t["mudo"]])),
+        order=alt.Order("etapa_ordem:Q"),
+        tooltip=[alt.Tooltip("mes_rotulo:N", title="Mês"), alt.Tooltip("etapa:N", title="Etapa"),
+                 alt.Tooltip("sum(orientacoes):Q", title="Orientações")],
+    ).transform_calculate(etapa_ordem=f"indexof({etapas!r}, datum.etapa)")
+    _exibir(_estilo(barras, t, 280))
+
+
+def barras_horizontais(df: pd.DataFrame, categoria: str, valor: str, titulo_categoria: str,
+                       rotulo_valor: str = "Orientações"):
     """Comparar magnitude entre categorias sem ordem natural: uma cor so (nada de rampa por valor).
     Ordenado do maior para o menor; o valor so no maior, o resto no tooltip e na tabela."""
     t = tema()
-    d = df.sort_values(valor, ascending=False)
+    d = df.sort_values(valor, ascending=False, kind="stable")
     ordem = list(d[categoria])
     base = alt.Chart(d).encode(y=alt.Y(f"{categoria}:N", sort=ordem, title=None, axis=alt.Axis(grid=False, labelLimit=320)))
     barras = base.mark_bar(size=16, cornerRadiusTopRight=4, cornerRadiusBottomRight=4, color=t["series"][0]).encode(
         x=alt.X(f"{valor}:Q", title=None, axis=alt.Axis(tickMinStep=1)),
-        tooltip=[alt.Tooltip(f"{categoria}:N", title=titulo_categoria), alt.Tooltip(f"{valor}:Q", title="Orientações")])
+        tooltip=[alt.Tooltip(f"{categoria}:N", title=titulo_categoria), alt.Tooltip(f"{valor}:Q", title=rotulo_valor)])
     rotulo = base.mark_text(align="left", dx=6, color=t["texto"], fontSize=12, fontWeight="bold").encode(
         x=f"{valor}:Q", text=f"{valor}:Q").transform_filter(alt.datum[categoria] == ordem[0])
     _exibir(_estilo(barras + rotulo, t, max(120, 30 * len(d) + 30)))

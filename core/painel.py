@@ -21,7 +21,8 @@ def resumo(db, data_ini=None, data_fim=None):
     filtro, args = _periodo(data_ini, data_fim)
     r = db.query(
         "SELECT COUNT(*) AS orientacoes, COUNT(DISTINCT o.documento) AS prestadores, "
-        "COALESCE(SUM(o.acao='FORMS'), 0) AS forms, COALESCE(SUM(o.acao='CONTATO DIRETO'), 0) AS contato_direto "
+        "COALESCE(SUM(o.acao='FORMS'), 0) AS forms, COALESCE(SUM(o.acao='CONTATO DIRETO'), 0) AS contato_direto, "
+        "COALESCE(SUM(o.numero_orientacao=1), 0) AS primeiras "
         f"{_BASE}{filtro}", tuple(args))[0]
     r["pendencias_abertas"] = tarefas.contagem(db)
     return r
@@ -31,6 +32,32 @@ def por_mes(db, data_ini=None, data_fim=None):
     filtro, args = _periodo(data_ini, data_fim)
     return db.query(f"SELECT substr(o.data_orientacao, 1, 7) AS mes, COUNT(*) AS orientacoes {_BASE}{filtro} "
                     "GROUP BY 1 ORDER BY 1", tuple(args))
+
+
+ETAPAS = ["1ª orientação", "FORMS", "Contato direto", "Demais orientações"]
+
+
+def por_mes_e_etapa(db, data_ini=None, data_fim=None):
+    """Orientacoes de cada mes separadas por etapa: a acao (FORMS, contato direto) vale primeiro; as sem acao
+    se dividem em 1a orientacao (do prestador naquele desvio) e demais (2a, 4a, 5a...)."""
+    filtro, args = _periodo(data_ini, data_fim)
+    return db.query(
+        "SELECT substr(o.data_orientacao, 1, 7) AS mes, CASE WHEN o.acao='CONTATO DIRETO' THEN 'Contato direto' "
+        "WHEN o.acao='FORMS' THEN 'FORMS' WHEN o.numero_orientacao=1 THEN '1ª orientação' "
+        f"ELSE 'Demais orientações' END AS etapa, COUNT(*) AS orientacoes {_BASE}{filtro} GROUP BY 1, 2 ORDER BY 1, 2",
+        tuple(args))
+
+
+DEGRAUS = [(1, "1 ou mais"), (2, "2 ou mais"), (3, "3 ou mais (1º FORMS)"), (6, "6 ou mais"), (9, "9 ou mais"),
+           (12, "12 ou mais (contato direto)")]
+
+
+def funil_de_reincidencia(db):
+    """Quantos casos (prestador + desvio, a numeracao e por desvio) ja chegaram a cada degrau de orientacoes.
+    Olha todo o historico, sem filtro de periodo: e a situacao atual de cada caso."""
+    maiores = [x["n"] for x in db.query(
+        f"SELECT MAX(o.numero_orientacao) AS n {_BASE} GROUP BY o.documento, o.desvio_id")]
+    return [{"etapa": rotulo, "casos": sum(1 for n in maiores if n >= minimo)} for minimo, rotulo in DEGRAUS]
 
 
 def por_desvio(db, data_ini=None, data_fim=None):

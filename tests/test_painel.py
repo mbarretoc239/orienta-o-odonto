@@ -69,3 +69,18 @@ def test_tempo_medio_de_conclusao(db):
     tarefas.marcar(db, GESTOR, t)
     r = painel.tempo_medio_de_conclusao(db)
     assert len(r) == 1 and r[0]["concluidas"] == 1 and r[0]["dias_em_media"] is not None
+
+
+def test_orientacoes_por_mes_e_etapa(db):
+    popular(db)  # jan: 1a, 2a, 3a (FORMS) do desvio A; fev: 1a do desvio B
+    linhas = {(x["mes"], x["etapa"]): x["orientacoes"] for x in painel.por_mes_e_etapa(db)}
+    assert linhas == {("2026-01", "1ª orientação"): 1, ("2026-01", "Demais orientações"): 1,
+                      ("2026-01", "FORMS"): 1, ("2026-02", "1ª orientação"): 1}
+    assert painel.resumo(db)["primeiras"] == 2
+
+
+def test_funil_de_reincidencia_conta_casos_prestador_e_desvio(db):
+    popular(db)  # A chegou a 3; B chegou a 1
+    funil = {x["etapa"]: x["casos"] for x in painel.funil_de_reincidencia(db)}
+    assert funil["1 ou mais"] == 2 and funil["2 ou mais"] == 1 and funil["3 ou mais (1º FORMS)"] == 1
+    assert funil["6 ou mais"] == 0 and funil["12 ou mais (contato direto)"] == 0
