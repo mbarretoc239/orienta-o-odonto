@@ -109,8 +109,28 @@ def botao_forms_grupo(itens, chave):
     botao_forms(chave)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def textos_gerais():
+    return textos.carregar_gerais(db())
+
+
+def quadro_ja_fez(itens, escolhidos):
+    """Marcadores 'ja fiz' (opcionais): a pendencia ja nasce concluida. Sem marcar, fica nas pendencias."""
+    precisa_forms = any(i["acao"] == "FORMS" for i in itens)
+    contatos = [(d, i) for d, i in zip(escolhidos, itens) if i["acao"] == "CONTATO DIRETO"]
+    if not (precisa_forms or contatos):
+        return False, []
+    with st.container(border=True):
+        st.markdown("**Já fez o que esta orientação exige?** (opcional; se não marcar, fica em *Pendências*)")
+        forms_feito = st.checkbox("FORMS já enviado", key="ja_fez_forms") if precisa_forms else False
+        feitos = [d["id"] for d, i in contatos
+                  if st.checkbox("Contato direto já feito" + (f" ({i['desvio']})" if len(contatos) > 1 else ""),
+                                 key=f"ja_fez_contato_{d['id']}")]
+    return forms_feito, feitos
+
+
 @st.dialog("Confirmar registro")
-def confirmar(prestador, escolhidos, itens, data, sinal, obs):
+def confirmar(prestador, escolhidos, itens, data, sinal, obs, forms_feito=False, contatos_feitos=()):
     st.markdown(f"**{prestador['nome']}**  \n{formatar_documento(prestador['documento'])}")
     st.write(f"Data: {data.strftime('%d/%m/%Y')}")
     for i in itens:
@@ -119,9 +139,16 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
         if i["acao"] == "CONTATO DIRETO":
             st.error(f"{i['desvio']}: Prestador já conta com {i['numero']} orientações. "
                      "Direcionar para contato direto por parte do credenciamento.")
+    if any(i["acao"] == "FORMS" for i in itens):
+        st.write("FORMS: " + ("**já enviado**" if forms_feito else "fica como pendência"))
+    for d, i in zip(escolhidos, itens):
+        if i["acao"] == "CONTATO DIRETO":
+            st.write(f"Contato direto ({i['desvio']}): " + ("**já feito**" if d["id"] in contatos_feitos
+                                                              else "fica como pendência"))
     if st.button("Confirmar e registrar", type="primary"):
         regs, msg = orientacoes.registrar_varios(
-            db(), usuario, prestador["documento"], [d["id"] for d in escolhidos], data, sinal, obs)
+            db(), usuario, prestador["documento"], [d["id"] for d in escolhidos], data, sinal, obs,
+            forms_feito=forms_feito, contato_direto_feito=contatos_feitos)
         if not regs:
             st.error(msg)
             return
@@ -135,7 +162,9 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs):
                  "orientacao": por_id[r["desvio_id"]].get("orientacao_forms")}
                 for r in regs
             ],
-            "mensagem": textos.montar_mensagem([por_id[r["desvio_id"]] for r in regs], textos.carregar_gerais(db())),
+            "mensagem": textos.montar_mensagem([por_id[r["desvio_id"]] for r in regs], textos_gerais()),
+            "forms_feito": forms_feito,
+            "contatos_feitos": [por_id[i]["nome"] for i in contatos_feitos],
         }
         st.rerun()
 
@@ -144,14 +173,18 @@ if st.session_state.get("ultimo_registro"):
     ultimo = st.session_state.pop("ultimo_registro")
     itens, mensagem = ultimo["itens"], ultimo["mensagem"]
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
-    with st.container(border=True):
-        st.markdown("**Pendências criadas para você marcar quando fizer:**")
-        st.write("• " + tarefas.TIPOS["capa"] + (" (uma por desvio)" if len(itens) > 1 else ""))
-        if any(i["acao"] == "FORMS" for i in itens):
-            st.write("• " + tarefas.TIPOS["forms"])
-        if any(i["acao"] == "CONTATO DIRETO" for i in itens):
-            st.write("• " + tarefas.TIPOS["contato_direto"])
-        link_pagina("pages/2_Pendencias.py", "Ir para as pendências")
+    contatos = [i for i in itens if i["acao"] == "CONTATO DIRETO"]
+    if any(i["acao"] == "FORMS" for i in itens) or contatos:
+        with st.container(border=True):
+            st.markdown("**Pendências desta orientação:**")
+            if any(i["acao"] == "FORMS" for i in itens):
+                st.write("• " + tarefas.TIPOS["forms"] + (" — já marcado como enviado" if ultimo["forms_feito"]
+                                                           else " — pendente: marque em Pendências quando enviar"))
+            for i in contatos:
+                st.write("• " + tarefas.TIPOS["contato_direto"] + f" ({i['desvio']})"
+                         + (" — já marcado como feito" if i["desvio"] in ultimo["contatos_feitos"]
+                            else " — pendente: marque em Pendências quando fizer"))
+            link_pagina("pages/2_Pendencias.py", "Ir para as pendências")
     controle_blocos(itens, "pos")
     for i in itens:
         bloco_desvio(i, "pos")
@@ -161,7 +194,7 @@ if st.session_state.get("ultimo_registro"):
         st.caption("Texto do relato do FORMS (use o ícone de copiar; acrescente o que quiser no formulário):")
         st.code(textos.relato_forms(com_forms[0]["prestador"], com_forms[0]["documento"], com_forms),
                 language=None, wrap_lines=True)
-    st.caption("Texto para enviar ao prestador (use o ícone de copiar):")
+    st.caption("Texto da orientação na capa do processo (use o ícone de copiar):")
     st.code(mensagem, language=None, wrap_lines=True)
 
 try:
@@ -225,10 +258,15 @@ try:
             for i in itens:
                 bloco_desvio(i, "previa")
             botao_forms_grupo(itens, "forms_previa")
+            # o texto da capa ja aparece ao escolher o desvio, antes de salvar
+            st.caption("Texto da orientação na capa do processo (use o ícone de copiar):")
+            st.code(textos.montar_mensagem(escolhidos, textos_gerais()), language=None, wrap_lines=True)
+            forms_feito, contatos_feitos = quadro_ja_fez(itens, escolhidos)
             data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True)
             obs = st.text_area("Observação (opcional)")
             if st.button("Salvar orientação", type="primary"):
-                confirmar(prestador, escolhidos, itens, data, None if sinal == "—" else sinal, obs)
+                confirmar(prestador, escolhidos, itens, data, None if sinal == "—" else sinal, obs,
+                          forms_feito, contatos_feitos)
 except Exception as e:  # noqa: BLE001
     erro_banco(e, "Registrar")

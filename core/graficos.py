@@ -98,10 +98,10 @@ def mapa_de_calor(df: pd.DataFrame):
 
 
 def pendencias_empilhadas(df: pd.DataFrame):
-    """Partes de um todo por usuario: barras horizontais empilhadas, 3 series (slots 1 a 3, em ordem fixa),
+    """Partes de um todo por usuario: barras horizontais empilhadas, 2 series (slots 1 e 2, em ordem fixa),
     2px da cor da superficie entre os segmentos."""
     t = tema()
-    nomes = {"capa": "Orientação na capa", "forms": "FORMS", "contato_direto": "Contato direto"}
+    nomes = {"forms": "FORMS", "contato_direto": "Contato direto"}
     longo = df.melt(id_vars="usuario", value_vars=list(nomes), var_name="tipo", value_name="pendencias")
     longo["tipo"] = longo["tipo"].map(nomes)
     longo = longo[longo["pendencias"] > 0]

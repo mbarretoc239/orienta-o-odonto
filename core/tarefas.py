@@ -1,9 +1,9 @@
-"""Pendencias de cada orientacao: orientacao na capa do processo (sempre), FORMS (3, 6, 9...) e contato direto
-(a partir da 12a). Cada uma e marcada como feita por quem registrou (ou por gestor/admin)."""
+"""Pendencias de acao de cada orientacao: FORMS (3a, 6a, 9a...) e contato direto (a partir da 12a).
+Cada uma e marcada como feita por quem registrou (ou por gestor/admin). Pode ja nascer feita, se a pessoa
+marcar isso na hora de registrar."""
 from core import auditoria
 
 TIPOS = {
-    "capa": "Orientação na capa do processo",
     "forms": "FORMS preenchido",
     "contato_direto": "Contato direto feito",
 }
@@ -15,25 +15,28 @@ _SELECT = (
     "o.criado_por, o.criado_em, CAST(julianday('now') - julianday(o.criado_em) AS INTEGER) AS dias "
     "FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
     "JOIN ori_prestadores p ON p.documento = o.documento JOIN ori_desvios d ON d.id = o.desvio_id "
-    "WHERE o.excluido_em IS NULL"
+    "WHERE o.excluido_em IS NULL AND t.tipo IN ('forms', 'contato_direto')"
 )
 
 
-def comandos_criar(lote_id, desvio_id):
-    """Comandos para entrar no batch do registro: a de capa sempre; FORMS ou contato direto conforme a acao."""
-    base = "INSERT OR IGNORE INTO ori_tarefas (orientacao_id, tipo) SELECT id, '{}' FROM ori_orientacoes " \
-           "WHERE lote_id=? AND desvio_id=?{}"
-    return [
-        (base.format("capa", ""), (lote_id, desvio_id)),
-        (base.format("forms", " AND acao='FORMS'"), (lote_id, desvio_id)),
-        (base.format("contato_direto", " AND acao='CONTATO DIRETO'"), (lote_id, desvio_id)),
-    ]
+def comandos_criar(lote_id, desvio_id, usuario, feitas=()):
+    """Comandos para entrar no batch do registro: FORMS ou contato direto, conforme a acao da orientacao.
+    Os tipos em `feitas` ja nascem concluidos (a pessoa marcou 'ja fiz' ao registrar)."""
+    cmds = []
+    for tipo, acao in (("forms", "FORMS"), ("contato_direto", "CONTATO DIRETO")):
+        feita = tipo in feitas
+        quando = "datetime('now')" if feita else "NULL"
+        cmds.append((
+            f"INSERT OR IGNORE INTO ori_tarefas (orientacao_id, tipo, feita_em, feita_por) "
+            f"SELECT id, ?, {quando}, ? FROM ori_orientacoes WHERE lote_id=? AND desvio_id=? AND acao=?",
+            (tipo, usuario if feita else None, lote_id, desvio_id, acao),
+        ))
+    return cmds
 
 
 def comandos_sincronizar(orientacao_id):
     """Depois de a acao de uma orientacao mudar (renumeracao): tira a pendencia que deixou de valer e cria a
-    nova. So vale para orientacoes que ja tem pendencias (as do historico migrado nao tem)."""
-    tem = "EXISTS (SELECT 1 FROM ori_tarefas WHERE orientacao_id=? AND tipo='capa')"
+    nova. As orientacoes importadas da planilha (autor 'migracao') nao tem pendencias."""
     cmds = []
     for tipo, acao in (("forms", "FORMS"), ("contato_direto", "CONTATO DIRETO")):
         cmds.append((
@@ -42,11 +45,16 @@ def comandos_sincronizar(orientacao_id):
             (orientacao_id, tipo, orientacao_id, acao),
         ))
         cmds.append((
-            f"INSERT OR IGNORE INTO ori_tarefas (orientacao_id, tipo) SELECT id, ? FROM ori_orientacoes "
-            f"WHERE id=? AND acao=? AND {tem}",
-            (tipo, orientacao_id, acao, orientacao_id),
+            "INSERT OR IGNORE INTO ori_tarefas (orientacao_id, tipo) SELECT id, ? FROM ori_orientacoes "
+            "WHERE id=? AND acao=? AND criado_por <> 'migracao'",
+            (tipo, orientacao_id, acao),
         ))
     return cmds
+
+
+def remover_pendencias_da_capa(db) -> None:
+    """A pendencia 'orientacao na capa' deixou de existir (so ha pendencias de acao). Limpa as que sobraram."""
+    db.execute("DELETE FROM ori_tarefas WHERE tipo='capa'")
 
 
 def pendencias(db, usuario=None, incluir_concluidas_dias=0):
@@ -67,7 +75,7 @@ def pendencias(db, usuario=None, incluir_concluidas_dias=0):
 def contagem(db, usuario=None):
     """Quantas pendencias em aberto (todas, ou de um usuario)."""
     sql = ("SELECT COUNT(*) AS n FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
-           "WHERE o.excluido_em IS NULL AND t.feita_em IS NULL")
+           "WHERE o.excluido_em IS NULL AND t.feita_em IS NULL AND t.tipo IN ('forms', 'contato_direto')")
     args = ()
     if usuario:
         sql += " AND o.criado_por = ?"
@@ -79,10 +87,11 @@ def resumo_por_usuario(db):
     """Visao do gestor: pendencias em aberto por quem registrou."""
     return db.query(
         "SELECT o.criado_por AS usuario, "
-        "SUM(t.tipo='capa') AS capa, SUM(t.tipo='forms') AS forms, SUM(t.tipo='contato_direto') AS contato_direto, "
+        "SUM(t.tipo='forms') AS forms, SUM(t.tipo='contato_direto') AS contato_direto, "
         "COUNT(*) AS total, MIN(o.criado_em) AS mais_antiga "
         "FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
-        "WHERE o.excluido_em IS NULL AND t.feita_em IS NULL GROUP BY o.criado_por ORDER BY total DESC"
+        "WHERE o.excluido_em IS NULL AND t.feita_em IS NULL AND t.tipo IN ('forms', 'contato_direto') "
+        "GROUP BY o.criado_por ORDER BY total DESC"
     )
 
 

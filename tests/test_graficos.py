@@ -21,7 +21,7 @@ def spec(grafico) -> str:
 MESES = pd.DataFrame({"mes": ["2026-06", "2026-07", "2026-08"], "orientacoes": [3, 8, 5]})
 DESVIOS = pd.DataFrame({"desvio": ["FALTA DATA", "RASURA", "MALOTE"], "orientacoes": [9, 4, 2]})
 CALOR = pd.DataFrame({"desvio": ["A", "A", "B"], "mes": ["2026-06", "2026-07", "2026-07"], "orientacoes": [2, 5, 1]})
-PEND = pd.DataFrame({"usuario": ["ana", "bia"], "capa": [3, 1], "forms": [1, 0], "contato_direto": [0, 2]})
+PEND = pd.DataFrame({"usuario": ["ana", "bia"], "forms": [1, 0], "contato_direto": [0, 2]})
 
 
 def test_rotulo_de_mes():
@@ -39,7 +39,7 @@ def test_todos_os_graficos_sao_validos_e_usam_a_paleta_do_tema(capturado, monkey
     assert len(capturado) == 4
     textos = [spec(g) for g in capturado]
     assert t["series"][0] in textos[0] and t["series"][0] in textos[1]  # uma serie: cor 1
-    assert all(c in textos[3] for c in t["series"])  # as 3 series empilhadas, em ordem fixa
+    assert all(c in textos[3] for c in t["series"][:2])  # as 2 series empilhadas (FORMS e contato direto)
     assert all(c in textos[2] for c in (t["sequencial"][0], t["sequencial"][-1]))  # rampa de uma cor so
     assert all(t["superficie"] in textos[i] for i in (2, 3))  # 2px da cor da superficie entre as marcas
 

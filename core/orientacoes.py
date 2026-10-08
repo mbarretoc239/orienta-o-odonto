@@ -56,8 +56,9 @@ def registradas_no_mes(db, documento, referencia):
     )
 
 
-def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao, lote_id):
-    """Numero e acao saem do proprio INSERT, entao registros simultaneos nao duplicam o numero."""
+def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao, lote_id, feitas=()):
+    """Numero e acao saem do proprio INSERT, entao registros simultaneos nao duplicam o numero.
+    `feitas`: tipos de pendencia (forms, contato_direto) que ja nascem concluidos."""
     n = "(SELECT COUNT(*) + 1 FROM ori_orientacoes WHERE documento=? AND desvio_id=? AND excluido_em IS NULL)"
     return [
         (
@@ -74,13 +75,16 @@ def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao
             "'desvio_id', desvio_id, 'numero', numero_orientacao) FROM ori_orientacoes WHERE id = last_insert_rowid()",
             (usuario["usuario"],),
         ),
-        *tarefas.comandos_criar(lote_id, desvio_id),  # depois da auditoria: ela usa last_insert_rowid()
+        *tarefas.comandos_criar(lote_id, desvio_id, usuario["usuario"], feitas),  # depois da auditoria
     ]
 
 
-def registrar_varios(db, usuario, documento, desvio_ids, data_orientacao, sinalizado, observacao):
+def registrar_varios(db, usuario, documento, desvio_ids, data_orientacao, sinalizado, observacao,
+                     forms_feito=False, contato_direto_feito=()):
     """Registra uma linha por desvio, todas juntas (ou nenhuma) e ligadas pelo mesmo lote_id.
-    Cada desvio tem a propria numeracao e a propria acao. Retorna (lista de orientacoes|None, mensagem)."""
+    Cada desvio tem a propria numeracao e a propria acao. `forms_feito`: o FORMS (que cobre o registro todo) ja foi
+    enviado; `contato_direto_feito`: ids dos desvios cujo contato direto ja foi feito. Essas pendencias ja nascem
+    concluidas. Retorna (lista de orientacoes|None, mensagem)."""
     doc = normalizar_documento(documento)
     desvio_ids = list(desvio_ids)
     if not desvio_ids:
@@ -94,17 +98,21 @@ def registrar_varios(db, usuario, documento, desvio_ids, data_orientacao, sinali
         return None, "Esta orientacao acabou de ser registrada (clique duplo?). Confira na consulta."
     lote_id = uuid.uuid4().hex
     comandos = []
+    contato_feito = set(contato_direto_feito)
     for did in desvio_ids:
-        comandos += _comandos_registro(usuario, doc, did, data_iso, sinalizado, observacao, lote_id)
+        feitas = ({"forms"} if forms_feito else set()) | ({"contato_direto"} if did in contato_feito else set())
+        comandos += _comandos_registro(usuario, doc, did, data_iso, sinalizado, observacao, lote_id, feitas)
     db.batch(comandos)
     return db.query(
         "SELECT * FROM ori_orientacoes WHERE lote_id=? ORDER BY desvio_id", (lote_id,)
     ), ""
 
 
-def registrar(db, usuario, documento, desvio_id, data_orientacao, sinalizado, observacao):
+def registrar(db, usuario, documento, desvio_id, data_orientacao, sinalizado, observacao, forms_feito=False,
+              contato_direto_feito=False):
     """Registro de um unico desvio. Retorna (orientacao|None, mensagem)."""
-    regs, msg = registrar_varios(db, usuario, documento, [desvio_id], data_orientacao, sinalizado, observacao)
+    regs, msg = registrar_varios(db, usuario, documento, [desvio_id], data_orientacao, sinalizado, observacao,
+                                 forms_feito, [desvio_id] if contato_direto_feito else ())
     return (regs[0] if regs else None), msg
 
 

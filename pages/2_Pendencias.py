@@ -11,8 +11,8 @@ st.set_page_config(page_title="Pendências", layout="wide")
 usuario = exigir_login()
 ver_todas = usuario["perfil"] in tarefas.PODE_VER_TODAS
 st.title("Pendências")
-st.caption("Cada orientação registrada gera: a orientação na capa do processo (sempre) e, quando a ação for FORMS "
-           "ou CONTATO DIRETO, o FORMS preenchido ou o contato direto feito. Marque quando concluir.")
+st.caption("Quando a ação da orientação for FORMS (3ª, 6ª, 9ª…) ou CONTATO DIRETO (a partir da 12ª), fica uma "
+           "pendência aqui até você marcar que o FORMS foi preenchido ou que o contato direto foi feito.")
 
 if st.session_state.get("msg_pendencias"):
     st.success(st.session_state.pop("msg_pendencias"))
@@ -24,7 +24,7 @@ try:
         if resumo:
             st.subheader("Em aberto por usuário")
             st.dataframe(pd.DataFrame(resumo).rename(columns={
-                "usuario": "Usuário", "capa": "Capa", "forms": "FORMS", "contato_direto": "Contato direto",
+                "usuario": "Usuário", "forms": "FORMS", "contato_direto": "Contato direto",
                 "total": "Total", "mais_antiga": "Mais antiga desde"}), hide_index=True, width="stretch")
         escolhido = st.selectbox("Ver as pendências de", ["Todos"] + [r["usuario"] for r in resumo])
         filtro = None if escolhido == "Todos" else escolhido

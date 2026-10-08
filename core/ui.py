@@ -16,6 +16,7 @@ def _banco():
     criar_schema(d)
     textos.preencher_estrutura(d)
     logs.limpar_antigos(d)
+    tarefas.remover_pendencias_da_capa(d)
     return d
 
 

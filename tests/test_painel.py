@@ -15,7 +15,7 @@ def test_resumo_e_filtro_de_periodo(db):
     popular(db)
     r = painel.resumo(db)
     assert (r["orientacoes"], r["prestadores"], r["forms"], r["contato_direto"]) == (4, 1, 1, 0)
-    assert r["pendencias_abertas"] == 5  # 4 capas + 1 forms
+    assert r["pendencias_abertas"] == 1  # so a pendencia de FORMS da 3a (nao ha mais pendencia de capa)
     jan = painel.resumo(db, "2026-01-01", "2026-01-31")
     assert jan["orientacoes"] == 3 and jan["forms"] == 1
 
