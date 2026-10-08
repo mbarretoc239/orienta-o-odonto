@@ -41,22 +41,31 @@ def _data_br(iso: str) -> str:
     return date.fromisoformat(iso).strftime("%d/%m/%Y")
 
 
+def _lista(itens: list[str]) -> str:
+    """'a', 'a e b' ou 'a, b e c'."""
+    return itens[0] if len(itens) == 1 else ", ".join(itens[:-1]) + " e " + itens[-1]
+
+
 # ---------- relato do FORMS ----------
 
+FRASE_CIENCIA = ("As devidas orientações foram feitas na capa do processo e feito este forms para ciência do "
+                 "credenciamento.")
+
 def relato_forms(nome: str, documento: str, itens: list[dict]) -> str:
-    """Texto-base do relato do FORMS: identifica o prestador e os desvios cobertos por aquele formulario.
-    `itens`: dicts com `desvio`, `numero` e `data` (ISO). Quem preenche so continua depois de 'Relato:'."""
+    """Texto-base do relato do FORMS, em texto corrido (o campo do formulario nao aceita topicos nem quebras
+    de linha): identifica o prestador e os desvios cobertos por aquele formulario.
+    `itens`: dicts com `desvio`, `numero` e `data` (ISO). Quem preenche acrescenta o que quiser depois."""
     tipo = "CPF" if len(documento) == 11 else "CNPJ"
     cabecalho = f"Prestador {nome} ({tipo} {formatar_documento(documento)})"
-    if len(itens) == 1:
-        i = itens[0]
-        corpo = (f'{cabecalho} recebeu a {rotulo_orientacao(i["numero"])} pelo desvio "{i["desvio"]}" '
-                 f"em {_data_br(i['data'])}, com encaminhamento para o FORMS.")
+    mesma_data = len(itens) > 1 and len({i["data"] for i in itens}) == 1
+    if mesma_data:
+        partes = [f'a {rotulo_orientacao(i["numero"])} pelo desvio "{i["desvio"]}"' for i in itens]
+        recebeu = f"recebeu, em {_data_br(itens[0]['data'])}, {_lista(partes)}"
     else:
-        linhas = "\n".join(
-            f'• {rotulo_orientacao(i["numero"])} pelo desvio "{i["desvio"]}" em {_data_br(i["data"])}' for i in itens)
-        corpo = f"{cabecalho} recebeu as orientações abaixo, com encaminhamento para o FORMS:\n{linhas}"
-    return f"{corpo}\n\nRelato:\n"
+        partes = [f'a {rotulo_orientacao(i["numero"])} pelo desvio "{i["desvio"]}" em {_data_br(i["data"])}'
+                  for i in itens]
+        recebeu = f"recebeu {_lista(partes)}"
+    return f"{cabecalho} {recebeu}. {FRASE_CIENCIA}"
 
 
 # ---------- mensagem ao prestador ----------
@@ -128,10 +137,6 @@ def carregar_gerais(db) -> dict:
 def salvar_gerais(db, valores: dict) -> None:
     db.batch([("INSERT INTO ori_textos (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET "
                "valor=excluded.valor", (k, v)) for k, v in valores.items() if k in GERAIS_PADRAO])
-
-
-def _lista(itens: list[str]) -> str:
-    return itens[0] if len(itens) == 1 else ", ".join(itens[:-1]) + " e " + itens[-1]
 
 
 def montar_mensagem(desvios: list[dict], gerais: dict) -> str:

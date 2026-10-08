@@ -107,7 +107,7 @@ if st.session_state.get("ultimo_registro"):
     botao_forms_grupo(itens, "forms_pos_registro")
     com_forms = [i for i in itens if i["acao"] == "FORMS"]
     if com_forms:
-        st.caption("Texto-base do relato do FORMS (use o ícone de copiar e continue o relato no formulário):")
+        st.caption("Texto do relato do FORMS (use o ícone de copiar; acrescente o que quiser no formulário):")
         st.code(textos.relato_forms(com_forms[0]["prestador"], com_forms[0]["documento"], com_forms),
                 language=None, wrap_lines=True)
     st.caption("Texto para enviar ao prestador (use o ícone de copiar):")

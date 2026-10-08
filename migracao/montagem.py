@@ -3,7 +3,10 @@ from collections import Counter
 
 import pandas as pd
 
+from datetime import date
+
 from core.regras import normalizar_documento, valida_documento
+from migracao import datas
 from migracao import limpeza as lp
 
 
@@ -47,6 +50,14 @@ def montar_orientacoes(acompanhamento, desvios, prest, conflitos):
     por documento + desvio em ordem de data."""
     ids = {lp.sem_acento(nome): i + 1 for i, (nome, _) in enumerate(desvios)}
     linhas, nomes_planilha = [], {}
+
+    # datas: o Excel leu algumas como mes/dia; a planilha foi preenchida em ordem cronologica, entao as
+    # linhas vizinhas dizem qual leitura vale (ver migracao/datas.py e scripts/revisar_datas.py)
+    com_desvio = acompanhamento[~acompanhamento["desvio"].map(lp.vazio)]
+    linhas_datas, corrigidas = datas.linhas_da_planilha((pos + 2, r["data"]) for pos, r in com_desvio.iterrows())
+    por_linha = {x.linha: x for x in linhas_datas}
+    sugestoes = datas.resolver(linhas_datas, date.today())
+
     for pos, r in acompanhamento.iterrows():
         linha = pos + 2  # numero da linha no Excel
         if lp.vazio(r["doc"]) and lp.vazio(r["desvio"]):
@@ -56,12 +67,25 @@ def montar_orientacoes(acompanhamento, desvios, prest, conflitos):
         if not doc or dev not in ids:
             conflitos.append(conflito("linha_descartada", doc, f"linha {linha}: desvio='{r['desvio']}'"))
             continue
-        data, corrigida = lp.parse_data(r["data"])
-        if not data:
-            conflitos.append(conflito("data_ausente_ou_invalida", doc, f"linha {linha}: '{r['data']}' ({dev})"))
-            continue
+        lida = por_linha[linha].data
         obs = [] if lp.vazio(r["obs"]) else [str(r["obs"]).strip()]
-        if corrigida:
+        if lida is None:
+            sug = datas.sugerir_sem_data(linhas_datas, linha)
+            if sug.sugerida is None:
+                conflitos.append(conflito("data_ausente_ou_invalida", doc, f"linha {linha}: '{r['data']}' ({dev})"))
+                continue
+            data = sug.sugerida.isoformat()
+            obs.append("Data estimada pelas linhas vizinhas da planilha (célula vazia)")
+            conflitos.append(conflito("data_estimada", doc, f"linha {linha}: sem data -> {data} ({sug.motivo})"))
+        elif por_linha[linha].ambigua and sugestoes[linha].sugerida != lida:
+            sug = sugestoes[linha]
+            data = sug.sugerida.isoformat()
+            obs.append(f"Data ajustada na migração (planilha: {lida.strftime('%d/%m/%Y')})")
+            conflitos.append(conflito(
+                "data_ajustada", doc, f"linha {linha}: {lida.isoformat()} -> {data} (confiança {sug.confianca})"))
+        else:
+            data = lida.isoformat()
+        if linha in corrigidas:
             obs.append(f"Data corrigida na migracao (planilha: {r['data']})")
             conflitos.append(conflito("data_corrigida", doc, f"linha {linha}: '{r['data']}' -> {data}"))
         if not valida_documento(doc):

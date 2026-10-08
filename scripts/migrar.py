@@ -20,13 +20,14 @@ ARQ_PRESTADORES = DADOS / "dPrestadores.xlsx"
 ARQ_PLANILHA = DADOS / "orientacao_adm_interna.xlsx"
 
 
-def main(dry_run=False):
+def main(dry_run=False, recarregar=False):
     db = None
     if not dry_run:
         db = get_db()
         criar_schema(db)
-        if db.query("SELECT 1 FROM ori_orientacoes LIMIT 1"):
-            sys.exit("Banco ja tem orientacoes: migracao cancelada para nao duplicar.")
+        if not recarregar and db.query("SELECT 1 FROM ori_orientacoes LIMIT 1"):
+            sys.exit("Banco ja tem orientacoes: migracao cancelada para nao duplicar "
+                     "(use --recarregar para refazer so as orientacoes de autor 'migracao').")
 
     conflitos = []
     desvios = montagem.montar_desvios(leitura.ler_desvios(ARQ_PLANILHA))
@@ -41,10 +42,16 @@ def main(dry_run=False):
     if dry_run:
         print("dry-run: nada gravado.")
         return
+    if recarregar:
+        try:
+            apagadas, backup = carga.preparar_recarga(db, orient, DADOS)
+        except RuntimeError as e:
+            sys.exit(str(e))
+        print(f"recarga: {apagadas} orientacoes da migracao apagadas (backup em {backup})")
     print(carga.gravar_desvios(db, desvios))
     print(carga.gravar_prestadores(db, prest))
     print(carga.gravar_orientacoes(db, orient))
 
 
 if __name__ == "__main__":
-    main(dry_run="--dry-run" in sys.argv)
+    main(dry_run="--dry-run" in sys.argv, recarregar="--recarregar" in sys.argv)

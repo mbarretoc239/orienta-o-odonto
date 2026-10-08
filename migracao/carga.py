@@ -27,6 +27,27 @@ def gravar_prestadores(db, prest):
     return f"{len(prest)} prestadores gravados"
 
 
+def preparar_recarga(db, orient, pasta):
+    """Antes de recarregar as orientacoes da migracao: aborta se alguem registrou orientacao nos mesmos
+    prestadores (a numeracao seria afetada), guarda um CSV de backup e apaga so as linhas de autor 'migracao'.
+    Retorna (quantidade apagada, caminho do backup)."""
+    from datetime import datetime
+
+    import pandas as pd
+
+    docs = set(orient["documento"])
+    de_pessoas = [r for r in db.query(
+        "SELECT documento, criado_por FROM ori_orientacoes WHERE criado_por <> 'migracao'") if r["documento"] in docs]
+    if de_pessoas:
+        raise RuntimeError(f"Ha {len(de_pessoas)} orientacao(oes) registradas por pessoas em prestadores da "
+                           "migracao: recarga abortada para nao alterar a numeracao delas.")
+    antigas = db.query("SELECT * FROM ori_orientacoes WHERE criado_por='migracao' ORDER BY id")
+    caminho = pasta / f"backup_orientacoes_migracao_{datetime.now():%Y%m%d_%H%M%S}.csv"
+    pd.DataFrame(antigas).to_csv(caminho, index=False, encoding="utf-8-sig", sep=";")
+    db.execute("DELETE FROM ori_orientacoes WHERE criado_por='migracao'")
+    return len(antigas), caminho
+
+
 def gravar_orientacoes(db, orient):
     _em_lotes(db, [
         ("INSERT INTO ori_orientacoes (documento, desvio_id, data_orientacao, numero_orientacao, acao, "
