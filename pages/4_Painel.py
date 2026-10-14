@@ -123,7 +123,7 @@ try:
             st.caption(f"Não inclui {d['importadas']} orientação(ões) do histórico importado da planilha.")
     with dir_:
         com_tabela("Pendências em aberto, por usuário", df_pend, graficos.pendencias_empilhadas,
-                   {"usuario": "Usuário", "forms": "FORMS", "contato_direto": "Contato direto",
+                   {"usuario": "Usuário", "forms": "FORMS", "contato_direto": "Contato direto", "relatar_gestao": "Relatar à gestão",
                     "total": "Total", "mais_antiga": "Mais antiga desde"})
 
     st.subheader("Prestadores reincidentes")

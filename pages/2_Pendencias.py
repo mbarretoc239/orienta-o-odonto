@@ -12,8 +12,9 @@ marca.aplicar()
 usuario = exigir_login()
 ver_todas = usuario["perfil"] in tarefas.PODE_VER_TODAS
 st.title("Pendências")
-st.caption("Quando a ação da orientação for FORMS (3ª, 6ª, 9ª…) ou CONTATO DIRETO (a partir da 12ª), fica uma "
-           "pendência aqui até você marcar que o FORMS foi preenchido ou que o contato direto foi feito.")
+st.caption("Quando a ação da orientação for FORMS (3ª, 6ª, 9ª…), CONTATO DIRETO (12ª) ou RELATAR PARA GESTÃO "
+           "(13ª em diante), fica uma pendência aqui até ser marcada como feita. O relato para a gestão só o "
+           "gestor marca; quando ele marca, a pendência sai da lista de quem registrou.")
 
 if st.session_state.get("msg_pendencias"):
     st.success(st.session_state.pop("msg_pendencias"))
@@ -26,7 +27,7 @@ try:
             st.subheader("Em aberto por usuário")
             st.dataframe(pd.DataFrame(resumo).rename(columns={
                 "usuario": "Usuário", "forms": "FORMS", "contato_direto": "Contato direto",
-                "total": "Total", "mais_antiga": "Mais antiga desde"}), hide_index=True, width="stretch")
+                "relatar_gestao": "Relatar à gestão", "total": "Total", "mais_antiga": "Mais antiga desde"}), hide_index=True, width="stretch")
         escolhido = st.selectbox("Ver as pendências de", ["Todos"] + [r["usuario"] for r in resumo])
         filtro = None if escolhido == "Todos" else escolhido
 
@@ -54,7 +55,8 @@ try:
         column_config={"Feito": st.column_config.CheckboxColumn("Feito", help="Marque quando concluir; "
                                                                   "desmarque para reabrir.")})
     mudou = [i for i in range(len(df)) if bool(editada.loc[i, "Feito"]) != bool(tabela.loc[i, "Feito"])]
-    st.caption("Um FORMS vale para todos os desvios registrados juntos: marcar um marca os do mesmo registro.")
+    st.caption("Um FORMS vale para todos os desvios registrados juntos: marcar um marca os do mesmo registro. "
+               "\"Relatado para a gestão\" só o gestor consegue marcar.")
     if st.button(f"Salvar marcações ({len(mudou)})", type="primary", disabled=not mudou):
         erros = []
         for i in mudou:

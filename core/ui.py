@@ -230,8 +230,8 @@ def link_pagina(pagina: str, rotulo: str):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _contagens(login: str, e_admin: bool):
-    return {"pendencias": tarefas.contagem(db(), login),
+def _contagens(login: str, e_admin: bool, perfil: str = "contas"):
+    return {"pendencias": tarefas.contagem(db(), login, perfil),
             "cadastros": usuarios.contar_pendentes(db()) if e_admin else 0}
 
 
@@ -241,7 +241,7 @@ def limpar_contagens():
 
 
 def _avisos_da_barra_lateral(u: dict):
-    n = _contagens(u["usuario"], u["perfil"] == "admin")
+    n = _contagens(u["usuario"], u["perfil"] == "admin", u["perfil"])
     link_pagina("pages/2_Pendencias.py",
                 f"Minhas pendências ({n['pendencias']})" if n["pendencias"] else "Minhas pendências")
     if n["cadastros"]:

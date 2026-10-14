@@ -71,7 +71,7 @@ def etapas_por_mes(df: pd.DataFrame):
     """Orientacoes por mes divididas por etapa: colunas empilhadas, uma cor por etapa em ordem fixa (1a orientacao,
     FORMS, contato direto) e as demais em cinza (recuam); 2px da cor da superficie entre os segmentos."""
     t = tema()
-    etapas = ["1ª orientação", "FORMS", "Contato direto", "Demais orientações"]
+    etapas = ["1ª orientação", "FORMS", "Contato direto ou gestão", "Demais orientações"]
     d = df.assign(mes_rotulo=df["mes"].map(rotulo_mes))
     ordem = list(dict.fromkeys(d.sort_values("mes")["mes_rotulo"]))
     barras = alt.Chart(d).mark_bar(size=26, stroke=t["superficie"], strokeWidth=2).encode(
@@ -120,7 +120,7 @@ def pendencias_empilhadas(df: pd.DataFrame):
     """Partes de um todo por usuario: barras horizontais empilhadas, 2 series (slots 1 e 2, em ordem fixa),
     2px da cor da superficie entre os segmentos."""
     t = tema()
-    nomes = {"forms": "FORMS", "contato_direto": "Contato direto"}
+    nomes = {"forms": "FORMS", "contato_direto": "Contato direto", "relatar_gestao": "Relatar à gestão"}
     longo = df.melt(id_vars="usuario", value_vars=list(nomes), var_name="tipo", value_name="pendencias")
     longo["tipo"] = longo["tipo"].map(nomes)
     longo = longo[longo["pendencias"] > 0]
@@ -128,7 +128,7 @@ def pendencias_empilhadas(df: pd.DataFrame):
     barras = alt.Chart(longo).mark_bar(size=16, stroke=t["superficie"], strokeWidth=2).encode(
         y=alt.Y("usuario:N", sort=ordem_usuarios, title=None, axis=alt.Axis(grid=False)),
         x=alt.X("sum(pendencias):Q", title=None, axis=alt.Axis(tickMinStep=1)),
-        color=alt.Color("tipo:N", scale=alt.Scale(domain=list(nomes.values()), range=t["series"])),
+        color=alt.Color("tipo:N", scale=alt.Scale(domain=list(nomes.values()), range=t["series"][:len(nomes)])),
         order=alt.Order("tipo:N"),
         tooltip=[alt.Tooltip("usuario:N", title="Usuário"), alt.Tooltip("tipo:N", title="Pendência"),
                  alt.Tooltip("sum(pendencias):Q", title="Em aberto")])

@@ -22,9 +22,9 @@ MESES = pd.DataFrame({"mes": ["2026-06", "2026-07", "2026-08"], "orientacoes": [
 DESVIOS = pd.DataFrame({"desvio": ["FALTA DATA", "RASURA", "MALOTE"], "orientacoes": [9, 4, 2]})
 CALOR = pd.DataFrame({"desvio": ["A", "A", "B"], "mes": ["2026-06", "2026-07", "2026-07"], "orientacoes": [2, 5, 1]})
 ETAPAS = pd.DataFrame({"mes": ["2026-06", "2026-06", "2026-07", "2026-07"],
-                       "etapa": ["1ª orientação", "FORMS", "Contato direto", "Demais orientações"],
+                       "etapa": ["1ª orientação", "FORMS", "Contato direto ou gestão", "Demais orientações"],
                        "orientacoes": [4, 1, 2, 3]})
-PEND = pd.DataFrame({"usuario": ["ana", "bia"], "forms": [1, 0], "contato_direto": [0, 2]})
+PEND = pd.DataFrame({"usuario": ["ana", "bia"], "forms": [1, 0], "contato_direto": [0, 2], "relatar_gestao": [0, 1]})
 
 
 def test_rotulo_de_mes():

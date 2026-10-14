@@ -26,6 +26,19 @@ def test_previa_alerta_na_12(db):
     assert reg["numero_orientacao"] == 12 and reg["acao"] == "CONTATO DIRETO"
 
 
+def test_da_13_em_diante_a_acao_e_relatar_para_gestao_e_cria_pendencia_do_gestor(db):
+    for i in range(12):
+        db.execute(
+            "INSERT INTO ori_orientacoes (documento, desvio_id, data_orientacao, numero_orientacao, criado_por) "
+            "VALUES (?,1,?,?,'x')", (CNPJ_OK, f"2026-01-{i + 1:02d}", i + 1))
+    p = orientacoes.previa(db, CNPJ_OK, 1)
+    assert p["numero"] == 13 and not p["contato_direto"] and p["acao"] == "RELATAR PARA GESTÃO"
+    reg = registrar(db, data="2026-03-01")[0]
+    assert reg["numero_orientacao"] == 13 and reg["acao"] == "RELATAR PARA GESTÃO"
+    assert [x["tipo"] for x in db.query("SELECT tipo FROM ori_tarefas WHERE orientacao_id=?", (reg["id"],))] == [
+        "relatar_gestao"]
+
+
 def _popular(db, desvio_id, quantas):
     for i in range(quantas):
         db.execute(

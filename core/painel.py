@@ -34,7 +34,7 @@ def por_mes(db, data_ini=None, data_fim=None):
                     "GROUP BY 1 ORDER BY 1", tuple(args))
 
 
-ETAPAS = ["1ª orientação", "FORMS", "Contato direto", "Demais orientações"]
+ETAPAS = ["1ª orientação", "FORMS", "Contato direto ou gestão", "Demais orientações"]
 
 
 def por_mes_e_etapa(db, data_ini=None, data_fim=None):
@@ -42,14 +42,15 @@ def por_mes_e_etapa(db, data_ini=None, data_fim=None):
     se dividem em 1a orientacao (do prestador naquele desvio) e demais (2a, 4a, 5a...)."""
     filtro, args = _periodo(data_ini, data_fim)
     return db.query(
-        "SELECT substr(o.data_orientacao, 1, 7) AS mes, CASE WHEN o.acao='CONTATO DIRETO' THEN 'Contato direto' "
+        "SELECT substr(o.data_orientacao, 1, 7) AS mes, CASE WHEN o.acao IN ('CONTATO DIRETO', 'RELATAR PARA GESTÃO') THEN 'Contato direto ou gestão' "
         "WHEN o.acao='FORMS' THEN 'FORMS' WHEN o.numero_orientacao=1 THEN '1ª orientação' "
         f"ELSE 'Demais orientações' END AS etapa, COUNT(*) AS orientacoes {_BASE}{filtro} GROUP BY 1, 2 ORDER BY 1, 2",
         tuple(args))
 
 
 DEGRAUS = [(1, "1 ou mais"), (2, "2 ou mais"), (3, "3 ou mais (1º FORMS)"), (6, "6 ou mais"), (9, "9 ou mais"),
-           (12, "12 ou mais (contato direto)")]
+           (12, "12 ou mais (contato direto)"),
+           (13, "13 ou mais (relatar para gestão)")]
 
 
 def funil_de_reincidencia(db):

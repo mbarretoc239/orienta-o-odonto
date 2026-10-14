@@ -2,11 +2,17 @@
 import re
 
 ACAO_A_CADA = 3  # "FORMS" em todo multiplo de 3 (confirmado)
-LIMITE_CONTATO_DIRETO = 12  # a partir daqui: encaminhar ao credenciamento para contato direto
+LIMITE_CONTATO_DIRETO = 12  # na 12a: encaminhar ao credenciamento para contato direto
+LIMITE_RELATAR_GESTAO = 13  # da 13a em diante: relatar para a gestao
+ACAO_RELATAR_GESTAO = "RELATAR PARA GESTÃO"
 
 
 def exige_contato_direto(numero: int) -> bool:
-    return numero >= LIMITE_CONTATO_DIRETO
+    return numero == LIMITE_CONTATO_DIRETO
+
+
+def exige_relato_gestao(numero: int) -> bool:
+    return numero >= LIMITE_RELATAR_GESTAO
 
 
 def so_digitos(valor) -> str:
@@ -56,7 +62,9 @@ def formatar_documento(doc: str) -> str:
 
 
 def acao_para(numero: int) -> str | None:
-    """CONTATO DIRETO a partir do limite; antes disso, FORMS em todo multiplo de 3."""
+    """RELATAR PARA GESTÃO da 13a em diante; CONTATO DIRETO na 12a; antes disso, FORMS em todo multiplo de 3."""
+    if exige_relato_gestao(numero):
+        return ACAO_RELATAR_GESTAO
     if exige_contato_direto(numero):
         return "CONTATO DIRETO"
     return "FORMS" if numero > 0 and numero % ACAO_A_CADA == 0 else None

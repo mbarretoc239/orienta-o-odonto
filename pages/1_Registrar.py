@@ -5,7 +5,7 @@ import streamlit as st
 
 from core import marca, orientacoes, planilha, prestadores, textos
 from core.config import url_forms
-from core.regras import formatar_documento, normalizar_documento, rotulo_orientacao
+from core.regras import ACAO_RELATAR_GESTAO, formatar_documento, normalizar_documento, rotulo_orientacao
 from core.ui import (
     botao_copiar,
     consulta_orientacoes,
@@ -96,6 +96,8 @@ def bloco_desvio(i, chave):
         if i["acao"] == "CONTATO DIRETO":
             st.error(f"Prestador já conta com {i['numero']} orientações. "
                      "Direcionar para contato direto por parte do credenciamento.")
+        elif i["acao"] == ACAO_RELATAR_GESTAO:
+            st.error(f"Prestador já conta com {i['numero']} orientações. Relatar para a gestão.")
         elif i["acao"] == "FORMS":
             st.info("Exige o preenchimento do FORMS.")
 
@@ -140,6 +142,9 @@ def confirmar(prestador, escolhidos, itens, data, sinal, obs, forms_feito=False,
         if i["acao"] == "CONTATO DIRETO":
             st.error(f"{i['desvio']}: Prestador já conta com {i['numero']} orientações. "
                      "Direcionar para contato direto por parte do credenciamento.")
+    for i in itens:
+        if i["acao"] == ACAO_RELATAR_GESTAO:
+            st.error(f"{i['desvio']}: {i['rotulo']}. Relatar para a gestão: fica como pendência para o gestor marcar.")
     if any(i["acao"] == "FORMS" for i in itens):
         st.write("FORMS: " + ("**já enviado**" if forms_feito else "fica como pendência"))
     for d, i in zip(escolhidos, itens):

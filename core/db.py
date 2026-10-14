@@ -207,8 +207,31 @@ def get_db():
     return _instancia
 
 
+def _liberar_tipo_relatar_gestao(db) -> None:
+    """O SQLite nao altera um CHECK: se a tabela de pendencias ainda so aceita os tipos antigos, recria-a (mesmos
+    dados, mesmos ids) aceitando 'relatar_gestao'. Tudo num lote atomico."""
+    r = db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='ori_tarefas'")
+    if not r or "relatar_gestao" in (r[0]["sql"] or ""):
+        return
+    db.batch([
+        ("DROP TABLE IF EXISTS ori_tarefas_novo", ()),
+        ("CREATE TABLE ori_tarefas_novo ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "orientacao_id INTEGER NOT NULL REFERENCES ori_orientacoes(id), "
+         "tipo TEXT NOT NULL CHECK (tipo IN ('capa','forms','contato_direto','relatar_gestao')), "
+         "feita_em TEXT, feita_por TEXT, criado_em TEXT NOT NULL DEFAULT (datetime('now')), "
+         "UNIQUE (orientacao_id, tipo))", ()),
+        ("INSERT INTO ori_tarefas_novo (id, orientacao_id, tipo, feita_em, feita_por, criado_em) "
+         "SELECT id, orientacao_id, tipo, feita_em, feita_por, criado_em FROM ori_tarefas", ()),
+        ("DROP TABLE ori_tarefas", ()),
+        ("ALTER TABLE ori_tarefas_novo RENAME TO ori_tarefas", ()),
+        ("CREATE INDEX IF NOT EXISTS ix_ori_tarefas_pendentes ON ori_tarefas(tipo) WHERE feita_em IS NULL", ()),
+    ])
+
+
 def criar_schema(db) -> None:
     db.batch([(s, ()) for s in _declarar_schema()])
+    _liberar_tipo_relatar_gestao(db)
     for tabela, coluna, definicao in COLUNAS_NOVAS:
         existentes = {r["name"] for r in db.query(f"SELECT name FROM pragma_table_info('{tabela}')")}
         if coluna not in existentes:

@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS ori_auditoria (
 CREATE TABLE IF NOT EXISTS ori_tarefas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orientacao_id INTEGER NOT NULL REFERENCES ori_orientacoes(id),
-  tipo TEXT NOT NULL CHECK (tipo IN ('capa','forms','contato_direto')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('capa','forms','contato_direto','relatar_gestao')),
   feita_em TEXT,
   feita_por TEXT,
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),

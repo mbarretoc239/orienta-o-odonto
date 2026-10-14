@@ -147,3 +147,49 @@ def test_historico_e_situacao_por_desvio(db):
     assert [x["numero"] for x in h] == [2, 1] and h[0]["registrado_por"] == "a.b"
     assert orientacoes.situacao_por_desvio(db, CNPJ_OK) == [
         {"desvio": "DESVIO A", "ja_tem": 2, "proxima": "3ª orientação", "acao_da_proxima": "FORMS"}]
+
+
+def test_da_13a_a_pendencia_e_relatar_para_gestao_e_so_o_gestor_marca(db):
+    popular_desvio(db, 1, 12)
+    r13 = registrar(db, "2026-02-01")
+    assert r13["acao"] == "RELATAR PARA GESTÃO" and tipos(db, r13["id"]) == ["relatar_gestao"]
+    tarefa = tarefas.pendencias(db)[0]
+    ok, msg = tarefas.marcar(db, USR, tarefa["tarefa_id"])  # quem registrou nao marca
+    assert not ok and "gestor" in msg and tarefas.contagem(db) == 1
+    assert tarefas.marcar(db, GESTOR, tarefa["tarefa_id"])[0]
+    assert tarefas.contagem(db) == 0 and tarefas.contagem(db, USR["usuario"]) == 0  # sai da lista de quem registrou
+
+
+def test_relato_a_gestao_conta_para_o_gestor_e_nao_para_outros_gestores_de_contas(db):
+    popular_desvio(db, 1, 12)
+    registrar(db, "2026-02-01")  # a.b registra a 13a
+    assert tarefas.contagem(db, "a.b", "contas") == 1
+    assert tarefas.contagem(db, "g.estor", "gestor") == 1  # o gestor ve o relato de qualquer pessoa
+    assert tarefas.contagem(db, "outro.u", "contas") == 0
+    por_usuario = {r["usuario"]: r for r in tarefas.resumo_por_usuario(db)}
+    assert por_usuario["a.b"]["relatar_gestao"] == 1 and por_usuario["a.b"]["total"] == 1
+
+
+def test_renumeracao_move_a_pendencia_entre_contato_direto_e_relato_a_gestao(db):
+    popular_desvio(db, 1, 12)
+    r13 = registrar(db, "2026-02-01")
+    assert tipos(db, r13["id"]) == ["relatar_gestao"]
+    primeira = db.query("SELECT id FROM ori_orientacoes WHERE desvio_id=1 AND numero_orientacao=1")[0]["id"]
+    assert orientacoes.excluir(db, GESTOR, primeira)[0]  # a 13a vira 12a
+    assert tipos(db, r13["id"]) == ["contato_direto"]
+
+
+def test_banco_antigo_com_check_de_tipos_e_recriado_sem_perder_pendencias(db):
+    from core.db import _liberar_tipo_relatar_gestao
+
+    registrar(db, "2026-01-01"), registrar(db, "2026-01-02"), registrar(db, "2026-01-03")  # a 3a gera FORMS
+    antes = db.query("SELECT * FROM ori_tarefas ORDER BY id")
+    db.batch([("ALTER TABLE ori_tarefas RENAME TO ori_tarefas_velha", ()),
+              ("CREATE TABLE ori_tarefas (id INTEGER PRIMARY KEY AUTOINCREMENT, orientacao_id INTEGER NOT NULL, "
+               "tipo TEXT NOT NULL CHECK (tipo IN ('capa','forms','contato_direto')), feita_em TEXT, feita_por TEXT, "
+               "criado_em TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (orientacao_id, tipo))", ()),
+              ("INSERT INTO ori_tarefas SELECT * FROM ori_tarefas_velha", ()), ("DROP TABLE ori_tarefas_velha", ())])
+    _liberar_tipo_relatar_gestao(db)
+    assert db.query("SELECT * FROM ori_tarefas ORDER BY id") == antes
+    db.execute("INSERT INTO ori_tarefas (orientacao_id, tipo) VALUES (1, 'relatar_gestao')")  # agora o tipo e aceito
+    _liberar_tipo_relatar_gestao(db)  # idempotente

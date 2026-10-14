@@ -5,7 +5,9 @@ from datetime import date
 from core import auditoria, prestadores, tarefas
 from core.regras import (
     ACAO_A_CADA,
+    ACAO_RELATAR_GESTAO,
     LIMITE_CONTATO_DIRETO,
+    LIMITE_RELATAR_GESTAO,
     acao_para,
     exige_contato_direto,
     normalizar_documento,
@@ -64,9 +66,10 @@ def _comandos_registro(usuario, doc, desvio_id, data_iso, sinalizado, observacao
         (
             "INSERT INTO ori_orientacoes (documento, desvio_id, data_orientacao, numero_orientacao, acao, "
             "credenciamento_sinalizado, observacao, criado_por, lote_id) "
-            f"SELECT ?, ?, ?, {n}, CASE WHEN ({n}) >= {int(LIMITE_CONTATO_DIRETO)} THEN 'CONTATO DIRETO' "
+            f"SELECT ?, ?, ?, {n}, CASE WHEN ({n}) >= {int(LIMITE_RELATAR_GESTAO)} THEN '{ACAO_RELATAR_GESTAO}' "
+            f"WHEN ({n}) = {int(LIMITE_CONTATO_DIRETO)} THEN 'CONTATO DIRETO' "
             f"WHEN ({n}) % {int(ACAO_A_CADA)} = 0 THEN 'FORMS' END, ?, ?, ?, ?",
-            (doc, desvio_id, data_iso, doc, desvio_id, doc, desvio_id, doc, desvio_id, sinalizado,
+            (doc, desvio_id, data_iso, doc, desvio_id, doc, desvio_id, doc, desvio_id, doc, desvio_id, sinalizado,
              observacao or None, usuario["usuario"], lote_id),
         ),
         (
