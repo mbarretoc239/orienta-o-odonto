@@ -2,6 +2,7 @@
 PAGINAS = [
     ("inicio.py", "Início", ""),
     ("pages/1_Registrar.py", "Registrar ocorrência", "registrar"),
+    ("pages/7_Minhas_ocorrencias.py", "Minhas ocorrências", "minhas-ocorrencias"),
     ("pages/2_Pendencias.py", "Pendências", "pendencias"),
     ("pages/3_Consultar.py", "Consultar Base", "consultar"),
     ("pages/4_Painel.py", "Painel", "painel"),

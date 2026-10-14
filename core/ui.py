@@ -155,6 +155,26 @@ def encerrar_sessao():
     st.stop()
 
 
+def botao_copiar(texto: str, rotulo: str, chave: str):
+    """Botao que poe `texto` na area de transferencia (colar na planilha mantem as colunas, se o texto tiver
+    tabulacoes). Usa execCommand primeiro: dentro do iframe do Streamlit Cloud o navigator.clipboard pode ser barrado."""
+    st.html(f"""<button id="cp_{chave}" type="button" style="font:inherit;color:inherit;background:transparent;
+  border:1px solid rgba(128,128,128,.45);border-radius:.5rem;padding:.35rem .9rem;cursor:pointer">{rotulo}</button>
+<script>(function () {{
+  var b = document.getElementById("cp_{chave}"), texto = {json.dumps(texto)}, rotulo = {json.dumps(rotulo)};
+  function avisar(ok) {{ b.textContent = ok ? "Copiado!" : "Não foi possível copiar"; setTimeout(function () {{ b.textContent = rotulo; }}, 2000); }}
+  b.addEventListener("click", function () {{
+    var ta = document.createElement("textarea"); ta.value = texto; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try {{ ok = document.execCommand("copy"); }} catch (e) {{}}
+    document.body.removeChild(ta);
+    if (ok) return avisar(true);
+    if (navigator.clipboard) navigator.clipboard.writeText(texto).then(function () {{ avisar(true); }}, function () {{ avisar(false); }});
+    else avisar(false);
+  }});
+}})();</script>""", unsafe_allow_javascript=True)
+
+
 def mostrar_segredo(chave: str, titulo: str, aviso: str):
     """Exibe um segredo gerado (codigo/senha temporaria) ate a pessoa confirmar que guardou."""
     valor = st.session_state.get(chave)
