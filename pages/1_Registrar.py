@@ -45,12 +45,15 @@ def usar_prestador_da_busca():
 
 def quadro_historico(doc):
     """Orientacoes que o prestador ja tem e o que a proxima de cada desvio vai acionar."""
-    historico = orientacoes.historico(db(), doc)
-    if not historico:
+    historico = orientacoes.historico(db(), doc, orientacoes.so_as_dele(usuario))
+    situacao = orientacoes.situacao_por_desvio(db(), doc)
+    if not situacao:
         st.caption("Este prestador ainda não tem orientações registradas.")
         return
     with st.expander(f"Histórico deste prestador ({len(historico)} orientação(ões))"):
-        situacao = orientacoes.situacao_por_desvio(db(), doc)
+        if orientacoes.so_as_dele(usuario):
+            st.caption("A numeração considera todas as orientações do prestador; a lista abaixo mostra só as que você "
+                       "registrou.")
         st.markdown("**Situação por desvio**")
         st.dataframe(pd.DataFrame(situacao).rename(columns={
             "desvio": "Desvio", "ja_tem": "Já tem", "proxima": "Próxima será", "acao_da_proxima": "Ação da próxima"}),
@@ -192,12 +195,6 @@ if st.session_state.get("ultimo_registro"):
     st.success("Orientação registrada." if len(itens) == 1 else f"{len(itens)} orientações registradas.")
     # temporario, ate o aplicativo substituir a planilha: a(s) linha(s) na ordem das colunas dela
     botao_copiar(planilha.linhas_da_planilha(itens, ultimo.get("sinal")), "Copiar linha da planilha", "planilha")
-    com_forms = [i for i in itens if i["acao"] == "FORMS"]
-    if com_forms:  # o relato so existe depois de salvar (depende da data); o resto o formulario ja mostrou antes
-        botao_forms_grupo(itens, "forms_pos_registro")
-        st.caption("Texto do relato do FORMS (use o ícone de copiar; acrescente o que quiser no formulário):")
-        st.code(textos.relato_forms(com_forms[0]["prestador"], com_forms[0]["documento"], com_forms),
-                language=None, wrap_lines=True)
 
 v = st.session_state.get("form_versao", 0)
 
@@ -233,7 +230,7 @@ try:
         quadro_historico(doc)
         desvios = desvios_ativos()
         hoje = date.today()
-        ja_registradas = orientacoes.registradas_no_mes(db(), doc, hoje)
+        ja_registradas = orientacoes.registradas_no_mes(db(), doc, hoje, orientacoes.so_as_dele(usuario))
         if ja_registradas:
             with st.container(border=True):
                 st.markdown(f"**Já registrado em {MESES[hoje.month - 1]}/{hoje.year} para este prestador:**")
@@ -259,15 +256,24 @@ try:
             for d in escolhidos:
                 p = orientacoes.previa(db(), doc, d["id"])
                 itens.append({"desvio": d["nome"], "numero": p["numero"], "rotulo": p["rotulo"], "acao": p["acao"]})
+            data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY", key=f"data_{v}")
             controle_blocos(itens, "previa")
             for i in itens:
                 bloco_desvio(i, "previa")
             botao_forms_grupo(itens, "forms_previa")
+            # o relato fica logo abaixo do botao do FORMS, antes de salvar: e o que se cola no formulario, e so depois
+            # a pessoa marca "FORMS ja enviado"
+            com_forms = [{"desvio": i["desvio"], "numero": i["numero"], "data": data.isoformat(),
+                          "orientacao": d.get("orientacao_forms")}
+                         for d, i in zip(escolhidos, itens) if i["acao"] == "FORMS"]
+            if com_forms:
+                st.caption("Texto do relato do FORMS (use o ícone de copiar; acrescente o que quiser no formulário):")
+                st.code(textos.relato_forms(prestador["nome"], prestador["documento"], com_forms),
+                        language=None, wrap_lines=True)
             # o texto da capa ja aparece ao escolher o desvio, antes de salvar
             st.caption("Texto da orientação na capa do processo (use o ícone de copiar):")
             st.code(textos.montar_mensagem(escolhidos, textos_gerais()), language=None, wrap_lines=True)
             forms_feito, contatos_feitos = quadro_ja_fez(itens, escolhidos)
-            data = st.date_input("Data da orientação", value=hoje, format="DD/MM/YYYY", key=f"data_{v}")
             sinal = st.radio("Credenciamento sinalizado?", ["—", "SIM", "NAO"], horizontal=True, key=f"sinal_{v}")
             obs = st.text_area("Observação (opcional)", key=f"obs_{v}")
             if st.button("Salvar orientação", type="primary"):

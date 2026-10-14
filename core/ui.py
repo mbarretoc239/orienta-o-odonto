@@ -6,7 +6,7 @@ import streamlit as st
 
 from core import auth, logs, sessao, tarefas, textos, usuarios
 from core.db import BancoNaoConfiguradoError, TursoIndisponivelError, criar_schema, get_db
-from core.paginas import PAGINAS
+from core.paginas import paginas_do_perfil
 
 LOG = logging.getLogger("orientacoes")
 
@@ -218,7 +218,7 @@ def barra_lateral(u: dict):
         if st.button("Sair"):
             encerrar_sessao()
         st.divider()
-        for arquivo, titulo, _ in PAGINAS:
+        for arquivo, titulo in paginas_do_perfil(u["perfil"]):
             link_pagina(arquivo, titulo)
 
 

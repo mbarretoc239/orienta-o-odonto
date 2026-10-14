@@ -4,5 +4,5 @@ import streamlit as st
 
 from core.paginas import PAGINAS
 
-paginas = [st.Page(arquivo, title=titulo, url_path=url or None, default=not url) for arquivo, titulo, url in PAGINAS]
+paginas = [st.Page(arquivo, title=titulo, url_path=url or None, default=not url) for arquivo, titulo, url, _ in PAGINAS]
 st.navigation(paginas, position="hidden").run()

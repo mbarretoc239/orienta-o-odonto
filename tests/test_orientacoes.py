@@ -159,3 +159,34 @@ def test_cadastro_e_renomear_prestador(db):
     assert prestadores.renomear(db, GESTOR, CPF_OK, "maria da silva souza")[0]
     assert prestadores.buscar(db, CPF_OK)["nome"] == "MARIA DA SILVA SOUZA"
     assert prestadores.buscar_por_nome(db, "silva souza")[0]["documento"] == CPF_OK
+
+
+def test_contas_so_ve_o_que_ele_registrou_e_gestor_ve_tudo(db):
+    outro = {"usuario": "outro.u", "nome": "Outro", "perfil": "contas"}
+    gestor = {"usuario": "g.1", "nome": "G", "perfil": "gestor"}
+    admin = {"usuario": "adm", "nome": "Adm", "perfil": "admin"}
+    r1 = orientacoes.registrar(db, USR, CNPJ_OK, 1, "2026-10-01", None, None)[0]
+    r2 = orientacoes.registrar(db, outro, CNPJ_OK, 1, "2026-10-02", None, None)[0]
+    assert (r1["numero_orientacao"], r2["numero_orientacao"]) == (1, 2)  # mesmo desvio: a numeracao e de todos
+    assert orientacoes.so_as_dele(USR) == "a.b" and orientacoes.so_as_dele(gestor) is None
+    assert orientacoes.so_as_dele(admin) is None
+    assert [h["registrado_por"] for h in orientacoes.historico(db, CNPJ_OK, orientacoes.so_as_dele(USR))] == ["a.b"]
+    assert {h["registrado_por"] for h in orientacoes.historico(db, CNPJ_OK, orientacoes.so_as_dele(gestor))} == {
+        "a.b", "outro.u"}
+    assert len(orientacoes.registradas_no_mes(db, CNPJ_OK, "2026-10-15", orientacoes.so_as_dele(USR))) == 1
+    assert len(orientacoes.registradas_no_mes(db, CNPJ_OK, "2026-10-15", orientacoes.so_as_dele(gestor))) == 2
+    # a consulta da tela "Consultar Base" usa o mesmo filtro de autor
+    assert {r["criado_por"] for r in orientacoes.listar(db, usuario=orientacoes.so_as_dele(USR))} == {"a.b"}
+    assert {r["criado_por"] for r in orientacoes.listar(db, usuario=orientacoes.so_as_dele(admin))} == {"a.b", "outro.u"}
+    # a situacao por desvio (so contagem, sem nomes) continua somando todos: e dela que sai o proximo numero
+    assert orientacoes.situacao_por_desvio(db, CNPJ_OK)[0]["ja_tem"] == 2
+
+
+def test_consulta_aberta_mas_o_login_de_quem_registrou_so_aparece_para_gestor_e_admin(db):
+    registrar(db)
+    linhas = orientacoes.listar(db)
+    assert "criado_por" in linhas[0]
+    assert all("criado_por" not in x for x in orientacoes.sem_login_do_autor(linhas, USR))
+    assert orientacoes.sem_login_do_autor(linhas, GESTOR) == linhas
+    assert orientacoes.sem_login_do_autor(linhas, {**USR, "perfil": "admin"}) == linhas
+    assert orientacoes.sem_login_do_autor(linhas, USR)[0]["numero_orientacao"] == linhas[0]["numero_orientacao"]

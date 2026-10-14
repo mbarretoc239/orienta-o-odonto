@@ -46,15 +46,17 @@ def _duplicada(db, doc, desvio_id, data_iso, usuario):
     ))
 
 
-def registradas_no_mes(db, documento, referencia):
-    """Orientacoes ja SALVAS do prestador no mes da data de referencia (aviso informativo na tela de registro)."""
+def registradas_no_mes(db, documento, referencia, usuario=None):
+    """Orientacoes ja SALVAS do prestador no mes da data de referencia (aviso informativo na tela de registro).
+    `usuario`: so as registradas por ele."""
     ano_mes = referencia.isoformat()[:7] if isinstance(referencia, date) else str(referencia)[:7]
+    filtro, args = ("", ()) if not usuario else (" AND o.criado_por=?", (usuario,))
     return db.query(
         "SELECT d.nome AS desvio, o.numero_orientacao AS numero, o.data_orientacao "
         "FROM ori_orientacoes o JOIN ori_desvios d ON d.id=o.desvio_id "
-        "WHERE o.documento=? AND o.excluido_em IS NULL AND substr(o.data_orientacao, 1, 7)=? "
+        f"WHERE o.documento=? AND o.excluido_em IS NULL AND substr(o.data_orientacao, 1, 7)=?{filtro} "
         "ORDER BY o.data_orientacao, o.id",
-        (normalizar_documento(documento), ano_mes),
+        (normalizar_documento(documento), ano_mes, *args),
     )
 
 
@@ -193,14 +195,28 @@ def autores(db):
         "SELECT DISTINCT criado_por FROM ori_orientacoes WHERE excluido_em IS NULL ORDER BY criado_por")]
 
 
-def historico(db, documento):
-    """Todas as orientacoes ativas do prestador, da mais recente para a mais antiga."""
+def historico(db, documento, usuario=None):
+    """Orientacoes ativas do prestador, da mais recente para a mais antiga. `usuario`: so as registradas por ele
+    (perfil contas nao ve o que outros usuarios registraram)."""
+    filtro, args = ("", ()) if not usuario else (" AND o.criado_por=?", (usuario,))
     return db.query(
         "SELECT d.nome AS desvio, o.numero_orientacao AS numero, o.data_orientacao AS data, o.acao, "
         "o.criado_por AS registrado_por FROM ori_orientacoes o JOIN ori_desvios d ON d.id=o.desvio_id "
-        "WHERE o.documento=? AND o.excluido_em IS NULL ORDER BY o.data_orientacao DESC, o.id DESC",
-        (normalizar_documento(documento),),
+        f"WHERE o.documento=? AND o.excluido_em IS NULL{filtro} ORDER BY o.data_orientacao DESC, o.id DESC",
+        (normalizar_documento(documento), *args),
     )
+
+
+def sem_login_do_autor(linhas: list[dict], usuario: dict) -> list[dict]:
+    """Consulta aberta a todos, mas o login de quem registrou so aparece para gestor/admin."""
+    if usuario["perfil"] in PODE_EDITAR:
+        return linhas
+    return [{k: v for k, v in linha.items() if k != "criado_por"} for linha in linhas]
+
+
+def so_as_dele(usuario: dict):
+    """Login a usar como filtro de autor: None para quem ve tudo (gestor/admin), o proprio login para contas."""
+    return None if usuario["perfil"] in PODE_EDITAR else usuario["usuario"]
 
 
 def situacao_por_desvio(db, documento):

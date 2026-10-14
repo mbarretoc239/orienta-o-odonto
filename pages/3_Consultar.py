@@ -51,11 +51,11 @@ try:
     ini = c3.date_input("De", value=None, format="DD/MM/YYYY")
     fim = c4.date_input("Até", value=None, format="DD/MM/YYYY")
     registrada_por = None
-    if usuario["perfil"] in orientacoes.PODE_EDITAR:  # gestor e admin acompanham quem adicionou cada orientacao
+    if usuario["perfil"] in orientacoes.PODE_EDITAR:  # so gestor e admin enxergam e filtram quem registrou
         registrada_por = c5.selectbox("Registrada por", orientacoes.autores(db()), index=None, placeholder="Todos")
 
     dados = consulta_orientacoes(doc or None, desvio["id"] if desvio else None, ini, fim, registrada_por)
-    df = pd.DataFrame(dados)
+    df = pd.DataFrame(orientacoes.sem_login_do_autor(dados, usuario))
     st.caption(f"{len(df)} orientações" + (f" (mostrando as {orientacoes.LIMITE_CONSULTA} mais recentes)"
                                            if len(df) >= orientacoes.LIMITE_CONSULTA else ""))
     if df.empty:
