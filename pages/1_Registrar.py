@@ -16,10 +16,10 @@ from core.ui import (
     limpar_contagens,
 )
 
-st.set_page_config(page_title="Registrar orientação", layout="centered", page_icon=marca.ICONE)
+st.set_page_config(page_title="Registrar ocorrência", layout="centered", page_icon=marca.ICONE)
 marca.aplicar()
 usuario = exigir_login()
-st.title("Registrar orientação")
+st.title("Registrar ocorrência")
 
 
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",

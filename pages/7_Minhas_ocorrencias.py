@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from html import escape
 
 import streamlit as st
 
@@ -38,7 +39,7 @@ try:
     for r in dados[:quantas]:
         col = st.columns([1.2, 3, 3, 1.4, 1.6, 1.6, 2.4], vertical_alignment="center")
         col[0].write(date.fromisoformat(r["data_orientacao"]).strftime("%d/%m/%Y"))
-        col[1].markdown(f"{r['prestador']}  \n<small>{formatar_documento(r['documento'])}</small>", unsafe_allow_html=True)
+        col[1].markdown(f"{escape(r['prestador'])}  \n<small>{formatar_documento(r['documento'])}</small>", unsafe_allow_html=True)
         col[2].write(r["desvio"])
         col[3].write(rotulo_orientacao(r["numero_orientacao"]))
         col[4].write(r["acao"] or "—")
