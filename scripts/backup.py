@@ -6,6 +6,8 @@ Pode ser agendado no Agendador de Tarefas do Windows.
 """
 import argparse
 import sys
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -16,8 +18,13 @@ from core.db import get_db  # noqa: E402
 
 
 def main():
-    # quando a saida e redirecionada para um arquivo (Agendador de Tarefas), mantem os acentos corretos
-    sys.stdout.reconfigure(encoding="utf-8")
+    if sys.stdout is None:  # pythonw (Agendador, sem janela): nao ha console, entao o log e gravado direto
+        args_pasta = RAIZ / "backups"
+        args_pasta.mkdir(exist_ok=True)
+        sys.stdout = sys.stderr = open(args_pasta / "backup.log", "a", encoding="utf-8", buffering=1)
+        print(f"--- {datetime.now():%d/%m/%Y %H:%M:%S}")
+    else:  # saida redirecionada para arquivo: mantem os acentos corretos
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--pasta", type=Path, default=RAIZ / "backups")
     ap.add_argument("--manter", type=int, default=30)
@@ -33,4 +40,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:  # noqa: BLE001 - sem console, o erro precisa ficar no log; o codigo de saida avisa o Agendador
+        traceback.print_exc()
+        sys.exit(1)
