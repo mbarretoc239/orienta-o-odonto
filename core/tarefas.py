@@ -14,15 +14,39 @@ ACAO_DO_TIPO = {"forms": "FORMS", "contato_direto": "CONTATO DIRETO", "relatar_g
 SO_GESTAO_MARCA = ("relatar_gestao",)
 PODE_VER_TODAS = ("gestor", "admin")
 _TIPOS_SQL = ", ".join(f"'{t}'" for t in TIPOS)
+# um FORMS cobre todos os desvios registrados juntos (mesmo lote): conta como UMA pendencia
+_UNIDADE = "CASE WHEN t.tipo='forms' AND o.lote_id IS NOT NULL THEN 'f' || o.lote_id ELSE 't' || t.id END"
 
 _SELECT = (
     "SELECT t.id AS tarefa_id, t.tipo, t.feita_em, t.feita_por, o.id AS orientacao_id, o.lote_id, o.documento, "
-    "p.nome AS prestador, d.nome AS desvio, o.data_orientacao, o.numero_orientacao AS numero, o.acao, "
+    "p.nome AS prestador, d.nome AS desvio, d.orientacao_forms, o.data_orientacao, o.numero_orientacao AS numero, o.acao, "
     "o.criado_por, o.criado_em, CAST(julianday('now') - julianday(o.criado_em) AS INTEGER) AS dias "
     "FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
     "JOIN ori_prestadores p ON p.documento = o.documento JOIN ori_desvios d ON d.id = o.desvio_id "
     f"WHERE o.excluido_em IS NULL AND t.tipo IN ({_TIPOS_SQL})"
 )
+
+
+def agrupar(dados: list[dict]) -> list[dict]:
+    """Um item por pendencia para a tela. Um FORMS vale para todos os desvios registrados juntos (mesmo lote), entao
+    as pendencias de FORMS do mesmo lote viram UM item, com a lista de desvios. Os demais tipos ficam um por um."""
+    itens, por_lote = [], {}
+    for t in dados:
+        desvio = {"desvio": t["desvio"], "numero": t["numero"], "data": t["data_orientacao"],
+                  "orientacao": t.get("orientacao_forms")}
+        if t["tipo"] == "forms" and t["lote_id"]:
+            chave = (t["lote_id"], bool(t["feita_em"]))
+            if chave in por_lote:
+                por_lote[chave]["desvios"].append(desvio)
+                por_lote[chave]["tarefa_ids"].append(t["tarefa_id"])
+                continue
+        item = {"tipo": t["tipo"], "tarefa_id": t["tarefa_id"], "tarefa_ids": [t["tarefa_id"]], "documento": t["documento"],
+                "prestador": t["prestador"], "desvios": [desvio], "feita_em": t["feita_em"], "feita_por": t["feita_por"],
+                "criado_por": t["criado_por"], "dias": t["dias"], "data": t["data_orientacao"]}
+        if t["tipo"] == "forms" and t["lote_id"]:
+            por_lote[(t["lote_id"], bool(t["feita_em"]))] = item
+        itens.append(item)
+    return itens
 
 
 def comandos_criar(lote_id, desvio_id, usuario, feitas=()):
@@ -80,7 +104,7 @@ def pendencias(db, usuario=None, incluir_concluidas_dias=0):
 
 def contagem(db, usuario=None, perfil=None):
     """Quantas pendencias em aberto (todas, ou de um usuario; `perfil` decide se entram os relatos a gestao)."""
-    sql = ("SELECT COUNT(*) AS n FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
+    sql = (f"SELECT COUNT(DISTINCT {_UNIDADE}) AS n FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
            f"WHERE o.excluido_em IS NULL AND t.feita_em IS NULL AND t.tipo IN ({_TIPOS_SQL})")
     args = ()
     if usuario:
@@ -95,9 +119,9 @@ def resumo_por_usuario(db):
     """Visao do gestor: pendencias em aberto por quem registrou."""
     return db.query(
         "SELECT o.criado_por AS usuario, "
-        "SUM(t.tipo='forms') AS forms, SUM(t.tipo='contato_direto') AS contato_direto, "
-        "SUM(t.tipo='relatar_gestao') AS relatar_gestao, "
-        "COUNT(*) AS total, MIN(o.criado_em) AS mais_antiga "
+        f"COUNT(DISTINCT CASE WHEN t.tipo='forms' THEN {_UNIDADE} END) AS forms, "
+        "SUM(t.tipo='contato_direto') AS contato_direto, SUM(t.tipo='relatar_gestao') AS relatar_gestao, "
+        f"COUNT(DISTINCT {_UNIDADE}) AS total, MIN(o.criado_em) AS mais_antiga "
         "FROM ori_tarefas t JOIN ori_orientacoes o ON o.id = t.orientacao_id "
         f"WHERE o.excluido_em IS NULL AND t.feita_em IS NULL AND t.tipo IN ({_TIPOS_SQL}) "
         "GROUP BY o.criado_por ORDER BY total DESC"

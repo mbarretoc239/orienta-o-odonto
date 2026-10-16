@@ -4,10 +4,10 @@ import pandas as pd
 import streamlit as st
 
 from core import marca, orientacoes, planilha, prestadores, textos
-from core.config import url_forms
 from core.regras import ACAO_RELATAR_GESTAO, formatar_documento, normalizar_documento, rotulo_orientacao
 from core.ui import (
     botao_copiar,
+    botao_forms,
     consulta_orientacoes,
     db,
     desvios_ativos,
@@ -63,15 +63,6 @@ def quadro_historico(doc):
             "Data": date.fromisoformat(h["data"]).strftime("%d/%m/%Y"), "Desvio": h["desvio"],
             "Orientação": rotulo_orientacao(h["numero"]), "Ação": h["acao"] or "—", "Registrada por": h["registrado_por"]}
             for h in historico]), hide_index=True, width="stretch")
-
-
-def botao_forms(chave):
-    """Atalho para o formulario do FORMS (link guardado nos secrets, nao no repositorio publico)."""
-    link = url_forms()
-    if link:
-        st.link_button("Abrir formulário do FORMS", link, key=chave)
-    else:
-        st.caption("Link do FORMS não configurado (FORMS_URL nos secrets).")
 
 
 def alternar_blocos():

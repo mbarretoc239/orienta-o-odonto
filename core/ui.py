@@ -161,6 +161,17 @@ def _js(valor: str) -> str:
     return json.dumps(valor).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
+def botao_forms(chave: str):
+    """Atalho para o formulario do FORMS (link guardado nos secrets, nao no repositorio publico)."""
+    from core.config import url_forms
+
+    link = url_forms()
+    if link:
+        st.link_button("Abrir formulário do FORMS", link, key=chave)
+    else:
+        st.caption("Link do FORMS não configurado (FORMS_URL nos secrets).")
+
+
 def botao_copiar(texto: str, rotulo: str, chave: str):
     """Botao que poe `texto` na area de transferencia (colar na planilha mantem as colunas, se o texto tiver
     tabulacoes). Usa execCommand primeiro: dentro do iframe do Streamlit Cloud o navigator.clipboard pode ser barrado."""

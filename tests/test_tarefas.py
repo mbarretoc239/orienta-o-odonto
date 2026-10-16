@@ -193,3 +193,29 @@ def test_banco_antigo_com_check_de_tipos_e_recriado_sem_perder_pendencias(db):
     assert db.query("SELECT * FROM ori_tarefas ORDER BY id") == antes
     db.execute("INSERT INTO ori_tarefas (orientacao_id, tipo) VALUES (1, 'relatar_gestao')")  # agora o tipo e aceito
     _liberar_tipo_relatar_gestao(db)  # idempotente
+
+
+def test_agrupar_junta_o_forms_do_mesmo_registro_e_deixa_os_outros_separados(db):
+    db.execute("INSERT INTO ori_desvios (nome, texto_padrao, orientacao_forms) VALUES ('B', 'b', 'colher a assinatura')")
+    popular_desvio(db, 1, 2)
+    popular_desvio(db, 2, 2)
+    regs, _ = orientacoes.registrar_varios(db, USR, CNPJ_OK, [1, 2], "2026-01-01", None, None)  # 3a nos dois: 1 FORMS
+    itens = tarefas.agrupar(tarefas.pendencias(db))
+    assert len(itens) == 1 and itens[0]["tipo"] == "forms" and len(itens[0]["tarefa_ids"]) == 2
+    assert tarefas.contagem(db) == 1  # o contador do menu segue a mesma regra: um FORMS por registro
+    assert tarefas.resumo_por_usuario(db)[0]["forms"] == 1 and tarefas.resumo_por_usuario(db)[0]["total"] == 1
+    assert [d["desvio"] for d in itens[0]["desvios"]] == ["DESVIO A", "B"]
+    assert {d["orientacao"] for d in itens[0]["desvios"]} == {None, "colher a assinatura"}
+    assert regs  # o relato usa os mesmos dados que o item agrupado traz
+    from core import textos
+    texto = textos.relato_forms("PRESTADOR", CNPJ_OK, itens[0]["desvios"])
+    assert "DESVIO A" in texto and '"B"' in texto and "colher a assinatura" in texto
+
+
+def test_agrupar_nao_junta_registros_diferentes_nem_tipos_diferentes(db):
+    popular_desvio(db, 1, 2)
+    registrar(db, "2026-01-01")  # 3a: FORMS (lote 1)
+    popular_desvio(db, 1, 8)  # leva o desvio ate a 11a
+    registrar(db, "2026-02-01")  # 12a: contato direto
+    itens = tarefas.agrupar(tarefas.pendencias(db))
+    assert sorted(i["tipo"] for i in itens) == ["contato_direto", "forms"]

@@ -9,3 +9,6 @@ data/
 .claude/
 .~lock.*
 backups/
+
+# material de apresentacao: so local, nao vai para o GitHub
+docs/ROTEIRO_APRESENTACAO.md
