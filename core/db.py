@@ -1,4 +1,6 @@
 """Acesso ao banco: SQLite local (desenvolvimento) ou Turso via API HTTP /v2/pipeline."""
+import hashlib
+import json
 import os
 import sqlite3
 import tomllib
@@ -229,10 +231,37 @@ def _liberar_tipo_relatar_gestao(db) -> None:
     ])
 
 
+MIGRACOES_VERSAO = 1  # aumentar quando mudar a logica de migracao (ex.: _liberar_tipo_relatar_gestao)
+
+
+def _impressao_do_schema() -> str:
+    """Resume o schema desejado (schema.sql + colunas novas + versao das migracoes). Quando ela muda, o banco e
+    atualizado uma vez; nos demais arranques basta comparar com a gravada em ori_meta."""
+    base = SCHEMA.read_text(encoding="utf-8") + json.dumps(COLUNAS_NOVAS) + str(MIGRACOES_VERSAO)
+    return hashlib.sha256(base.encode()).hexdigest()[:16]
+
+
+def _schema_em_dia(db, impressao: str) -> bool:
+    try:
+        r = db.query("SELECT valor FROM ori_meta WHERE chave='schema'")
+    except Exception:  # noqa: BLE001 - tabela ainda nao existe (banco novo ou anterior a esta versao)
+        return False
+    return bool(r) and r[0]["valor"] == impressao
+
+
 def criar_schema(db) -> None:
+    """Cria/atualiza as tabelas. Cada chamada ao Turso custa cerca de meio segundo, entao o trabalho so acontece
+    quando o schema mudou; no arranque normal e uma consulta so."""
+    impressao = _impressao_do_schema()
+    if _schema_em_dia(db, impressao):
+        return
     db.batch([(s, ()) for s in _declarar_schema()])
     _liberar_tipo_relatar_gestao(db)
+    existentes = {(r["tabela"], r["coluna"]) for r in db.query(  # todas as colunas numa consulta so
+        "SELECT m.name AS tabela, p.name AS coluna FROM sqlite_master m JOIN pragma_table_info(m.name) p "
+        "WHERE m.type='table'")}
     for tabela, coluna, definicao in COLUNAS_NOVAS:
-        existentes = {r["name"] for r in db.query(f"SELECT name FROM pragma_table_info('{tabela}')")}
-        if coluna not in existentes:
+        if (tabela, coluna) not in existentes:
             db.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
+    db.execute("INSERT INTO ori_meta (chave, valor) VALUES ('schema', ?) "
+               "ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor", (impressao,))

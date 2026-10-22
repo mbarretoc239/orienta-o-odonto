@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS ori_desvios (
   complemento_curto TEXT,
   trecho_grupo TEXT
 );
+CREATE TABLE IF NOT EXISTS ori_meta (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS ori_textos (
   chave TEXT PRIMARY KEY,
   valor TEXT NOT NULL

@@ -188,28 +188,32 @@ def preencher_estrutura(db) -> None:
     """Preenche (so onde ainda esta vazio) resumo, titulo, corpo e fechamento de cada desvio e cria os textos
     gerais padrao. Idempotente; os valores editados na Administracao nao sao sobrescritos."""
     comandos = []
-    for d in db.query("SELECT id, nome, texto_padrao FROM ori_desvios WHERE titulo IS NULL"):
-        e = estruturar(d["texto_padrao"])
-        resumo = RESUMOS_PADRAO.get(_sem_acento(d["nome"])) or d["nome"].lower()
-        comandos.append((
-            "UPDATE ori_desvios SET resumo=COALESCE(resumo, ?), titulo=?, corpo=?, fechamento_tipo=? WHERE id=?",
-            (resumo, e["titulo"], e["corpo"], e["fechamento_tipo"], d["id"]),
-        ))
-    for d in db.query("SELECT id, nome FROM ori_desvios WHERE orientacao_forms IS NULL"):
-        frase = ORIENTACOES_FORMS_PADRAO.get(_sem_acento(d["nome"]))
-        if frase:
-            comandos.append(("UPDATE ori_desvios SET orientacao_forms=? WHERE id=? AND orientacao_forms IS NULL",
-                             (frase, d["id"])))
-    for d in db.query("SELECT id, nome FROM ori_desvios WHERE orientacao_curta IS NULL"):
-        curta = CURTAS_PADRAO.get(_sem_acento(d["nome"]))
-        if curta:  # desvio novo, sem frase padrao: fica NULL e a mensagem usa o titulo do texto
-            comandos.append(("UPDATE ori_desvios SET orientacao_curta=?, grupo_curto=?, complemento_curto=?, "
-                             "trecho_grupo=? WHERE id=? AND orientacao_curta IS NULL", (*curta, d["id"])))
-    for d in db.query("SELECT id, nome FROM ori_desvios WHERE trecho_grupo IS NULL AND orientacao_curta IS NOT NULL"):
-        trecho = (CURTAS_PADRAO.get(_sem_acento(d["nome"])) or (None,) * 4)[3]
-        if trecho:  # coluna criada depois da frase curta: completa so quem ainda nao tem trecho
-            comandos.append(("UPDATE ori_desvios SET trecho_grupo=? WHERE id=? AND trecho_grupo IS NULL",
-                             (trecho, d["id"])))
+    # uma consulta so (cada ida ao banco custa); as condicoes valem sobre o estado de antes das alteracoes
+    for d in db.query("SELECT id, nome, texto_padrao, titulo, orientacao_forms, orientacao_curta, trecho_grupo "
+                      "FROM ori_desvios"):
+        chave = _sem_acento(d["nome"])
+        if d["titulo"] is None:
+            e = estruturar(d["texto_padrao"])
+            resumo = RESUMOS_PADRAO.get(chave) or d["nome"].lower()
+            comandos.append((
+                "UPDATE ori_desvios SET resumo=COALESCE(resumo, ?), titulo=?, corpo=?, fechamento_tipo=? WHERE id=?",
+                (resumo, e["titulo"], e["corpo"], e["fechamento_tipo"], d["id"]),
+            ))
+        if d["orientacao_forms"] is None:
+            frase = ORIENTACOES_FORMS_PADRAO.get(chave)
+            if frase:
+                comandos.append(("UPDATE ori_desvios SET orientacao_forms=? WHERE id=? AND orientacao_forms IS NULL",
+                                 (frase, d["id"])))
+        if d["orientacao_curta"] is None:
+            curta = CURTAS_PADRAO.get(chave)
+            if curta:  # desvio novo, sem frase padrao: fica NULL e a mensagem usa o titulo do texto
+                comandos.append(("UPDATE ori_desvios SET orientacao_curta=?, grupo_curto=?, complemento_curto=?, "
+                                 "trecho_grupo=? WHERE id=? AND orientacao_curta IS NULL", (*curta, d["id"])))
+        elif d["trecho_grupo"] is None:
+            trecho = (CURTAS_PADRAO.get(chave) or (None,) * 4)[3]
+            if trecho:  # coluna criada depois da frase curta: completa so quem ainda nao tem trecho
+                comandos.append(("UPDATE ori_desvios SET trecho_grupo=? WHERE id=? AND trecho_grupo IS NULL",
+                                 (trecho, d["id"])))
     existentes = {r["chave"] for r in db.query("SELECT chave FROM ori_textos")}
     comandos += [("INSERT OR IGNORE INTO ori_textos (chave, valor) VALUES (?,?)", (k, v))
                  for k, v in GERAIS_PADRAO.items() if k not in existentes]
